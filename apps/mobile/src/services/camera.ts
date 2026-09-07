@@ -1,4 +1,4 @@
-import { VideoSlice, VideoEvent, VideoEventType } from '@road-gis/shared';
+import { VideoSlice, VideoEvent, VideoEventType, AssetPhoto } from '@road-gis/shared';
 import { offlineDb } from './db.js';
 
 export class VideoRecorder {
@@ -127,3 +127,51 @@ export class VideoRecorder {
 }
 
 export const videoRecorder = new VideoRecorder();
+
+export class PhotoManager {
+  async capturePhoto(
+    assetId: string,
+    sessionId: string,
+    photoDataUrl: string,
+    coords?: { latitude: number; longitude: number }
+  ): Promise<AssetPhoto> {
+    const photoId = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const photo: AssetPhoto = {
+      id: photoId,
+      asset_id: assetId,
+      session_id: sessionId,
+      file_name: `PHOTO_${assetId.slice(0, 8)}_${Date.now()}.jpg`,
+      storage_path: photoDataUrl,
+      storage_url: photoDataUrl,
+      file_size_bytes: Math.round(photoDataUrl.length * 0.75),
+      photo_time: nowIso,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    };
+
+    // 1. 保存到本地持久化 IndexedDB
+    await offlineDb.savePhoto(photo);
+
+    // 2. 加入 P4 优先级同步队列
+    offlineDb.saveTask({
+      id: crypto.randomUUID(),
+      session_id: sessionId,
+      task_type: 'PHOTO',
+      priority: 4,
+      resource_id: photoId,
+      total_bytes: photo.file_size_bytes,
+      uploaded_bytes: 0,
+      status: 'PENDING',
+      retry_count: 0,
+    });
+
+    return photo;
+  }
+
+  async getPhotos(assetId: string): Promise<AssetPhoto[]> {
+    return offlineDb.getAssetPhotos(assetId);
+  }
+}
+
+export const photoManager = new PhotoManager();

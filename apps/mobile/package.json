@@ -1,6 +1,6 @@
 {
   "name": "@road-gis/mobile",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "道路路产智能巡查与 GIS 管理系统 - 车载移动巡查端",
   "private": true,
   "type": "module",
@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@road-gis/shared": "*",
     "clsx": "^2.1.1",
     "lucide-react": "^0.378.0",
@@ -17,6 +19,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.2.1",

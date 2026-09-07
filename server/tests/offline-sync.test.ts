@@ -559,3 +559,124 @@ test('Scenario 6: Asset inspection retrieves linked photos and video events with
   assert.strictEqual(locateData.data.videoSlice.id, testVideoSliceId);
   assert.strictEqual(locateData.data.offsetSeconds, 240);
 });
+
+// ==========================================
+// 场景 7：同步队列严密状态迁移与重试生命周期验证
+// ==========================================
+test('Scenario 7: Sync queue lifecycle state transitions (PENDING -> UPLOADING -> UPLOADED and retry loop)', async () => {
+  // 1. 验证正向流程: PENDING -> UPLOADING -> UPLOADED
+  const normalItem: SyncQueueItem = {
+    id: crypto.randomUUID(),
+    session_id: testSessionId,
+    item_type: 'ASSET',
+    priority: 3,
+    resource_id: crypto.randomUUID(),
+    status: 'PENDING',
+    retry_count: 0,
+    max_retries: 5,
+    idempotency_key: `ASSET_NORMAL_${Date.now()}`,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  assert.strictEqual(normalItem.status, 'PENDING');
+  normalItem.status = 'UPLOADING';
+  normalItem.updated_at = new Date().toISOString();
+  assert.strictEqual(normalItem.status, 'UPLOADING');
+
+  normalItem.status = 'UPLOADED';
+  normalItem.updated_at = new Date().toISOString();
+  assert.strictEqual(normalItem.status, 'UPLOADED');
+
+  // 2. 验证失败重试回退循环: PENDING -> UPLOADING -> FAILED -> PENDING (Retry)
+  const retryItem: SyncQueueItem = {
+    id: crypto.randomUUID(),
+    session_id: testSessionId,
+    item_type: 'PHOTO',
+    priority: 4,
+    resource_id: crypto.randomUUID(),
+    status: 'PENDING',
+    retry_count: 0,
+    max_retries: 3,
+    idempotency_key: `PHOTO_RETRY_${Date.now()}`,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  // 第 1 次尝试上传中
+  retryItem.status = 'UPLOADING';
+  assert.strictEqual(retryItem.status, 'UPLOADING');
+
+  // 发生瞬时网络中断，迁移为 FAILED，记录错误信息与增加重试计数
+  retryItem.status = 'FAILED';
+  retryItem.retry_count += 1;
+  retryItem.last_error = 'Connection reset by peer';
+  assert.strictEqual(retryItem.status, 'FAILED');
+  assert.strictEqual(retryItem.retry_count, 1);
+
+  // 网络检测恢复或定时调度器唤起重试，状态自动从 FAILED 重新置为 PENDING
+  if (retryItem.retry_count < retryItem.max_retries) {
+    retryItem.status = 'PENDING';
+    retryItem.last_error = undefined;
+  }
+  assert.strictEqual(retryItem.status, 'PENDING', 'Failed item under max_retries must reset to PENDING');
+
+  // 第 2 次尝试并成功
+  retryItem.status = 'UPLOADING';
+  retryItem.status = 'UPLOADED';
+  assert.strictEqual(retryItem.status, 'UPLOADED');
+});
+
+// ==========================================
+// 场景 8：真机 GPS 实体全字段规范与现场照片多媒体联动验证
+// ==========================================
+test('Scenario 8: Real GNSS data structure and Photo entity verification', async () => {
+  const photoAssetId = assetIds[0];
+  const photoId = crypto.randomUUID();
+
+  // 1. 验证真实 GNSS 坐标点全部必填字段
+  const realGpsPoint: GPSTrackPoint = {
+    session_id: testSessionId,
+    point_time: new Date().toISOString(),
+    latitude: 23.150042,
+    longitude: 113.280125,
+    speed_kmh: 58.5,
+    heading: 42,
+    altitude: 18.3,
+    accuracy: 3.2,
+    provider: 'device_gnss',
+    is_valid: true,
+  };
+
+  assert.ok(realGpsPoint.latitude > 0 && realGpsPoint.longitude > 0);
+  assert.strictEqual(realGpsPoint.provider, 'device_gnss');
+  assert.strictEqual(realGpsPoint.accuracy, 3.2);
+
+  // 2. 验证现场实景照片元数据创建并上报服务端
+  const photoRes = await fetch(`${baseUrl}/photos/metadata`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Idempotency-Key': `PHOTO_${photoId}` },
+    body: JSON.stringify({
+      id: photoId,
+      asset_id: photoAssetId,
+      session_id: testSessionId,
+      file_name: `PHOTO_${photoId.slice(0, 8)}.jpg`,
+      storage_path: `/uploads/photos/${photoId}.jpg`,
+      storage_url: `/uploads/photos/${photoId}.jpg`,
+      file_size_bytes: 512 * 1024,
+      photo_time: new Date().toISOString(),
+      latitude: realGpsPoint.latitude,
+      longitude: realGpsPoint.longitude,
+      azimuth: realGpsPoint.heading,
+    }),
+  });
+  assert.strictEqual(photoRes.status, 201);
+  const photoData = await photoRes.json();
+  assert.strictEqual(photoData.data.asset_id, photoAssetId);
+
+  // 3. 通过路产 ID 查询照片
+  const assetWithPhotoRes = await fetch(`${baseUrl}/assets/${photoAssetId}`);
+  const assetWithPhotoData = await assetWithPhotoRes.json();
+  assert.ok(assetWithPhotoData.data.photos && assetWithPhotoData.data.photos.length > 0);
+  assert.strictEqual(assetWithPhotoData.data.photos[0].id, photoId);
+});

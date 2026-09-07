@@ -55,6 +55,17 @@ export const offlineDb = {
     return idbStorage.getAssetHistory(assetId);
   },
 
+  // --- Photos (现场实景照片) ---
+  savePhoto: async (photo: AssetPhoto) => {
+    return idbStorage.savePhoto(photo);
+  },
+  getAssetPhotos: async (assetId: string) => {
+    return idbStorage.getAssetPhotos(assetId);
+  },
+  getAllPhotos: async (sessionId?: string) => {
+    return idbStorage.getAllPhotos(sessionId);
+  },
+
   // --- Video Slices ---
   saveVideoSlice: (slice: VideoSlice) => {
     idbStorage.saveVideoSlice(slice);

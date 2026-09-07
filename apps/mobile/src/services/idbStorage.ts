@@ -279,6 +279,40 @@ class IndexedDBStorage {
     });
   }
 
+  // --- Photos ---
+  async savePhoto(photo: AssetPhoto): Promise<void> {
+    this.memFallback.photos.set(photo.id, photo);
+    const store = await this.getStore(STORES.PHOTOS, 'readwrite');
+    if (!store) return;
+    store.put(photo);
+  }
+
+  async getAssetPhotos(assetId: string): Promise<AssetPhoto[]> {
+    const store = await this.getStore(STORES.PHOTOS, 'readonly');
+    if (!store) {
+      return Array.from(this.memFallback.photos.values()).filter((p) => p.asset_id === assetId);
+    }
+    return new Promise((resolve) => {
+      const req = store.index('asset_id').getAll(assetId);
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  }
+
+  async getAllPhotos(sessionId?: string): Promise<AssetPhoto[]> {
+    const store = await this.getStore(STORES.PHOTOS, 'readonly');
+    if (!store) {
+      let list = Array.from(this.memFallback.photos.values());
+      if (sessionId) list = list.filter((p) => p.session_id === sessionId);
+      return list;
+    }
+    return new Promise((resolve) => {
+      const req = sessionId ? store.index('session_id').getAll(sessionId) : store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  }
+
   // --- 5. Video Slices & Video Events ---
   async saveVideoSlice(slice: VideoSlice): Promise<void> {
     this.memFallback.videos.set(slice.id, slice);

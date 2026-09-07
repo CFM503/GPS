@@ -36,13 +36,16 @@ GIS/
 │   │   └── src/components/   # GIS主地图、图层管理器、轨迹回放时间轴、视频时间跳转播放器
 │   │
 │   └── mobile/               # 车载移动巡查端 (@road-gis/mobile)
-│       ├── src/services/     # IndexedDB生产级离线存储引擎 (idbStorage)、Screen WakeLock、视频切片
-│       └── src/components/   # 驾驶安全 8 大触控色块按键、5级优先级同步队列、停车安全文字补录
+│       ├── android/          # Capacitor 5 原生 Android 工程 (全权限配置与 APK 构建源码)
+│       ├── src/services/     # 真实硬件GNSS (gps.ts)、相机实景拍照 (camera.ts)、IndexedDB (idbStorage)
+│       └── src/components/   # 驾驶安全 8 大触控色块按键、仪表盘实时状态栏、5级优先级同步队列
 │
 ├── prototype/                # 零依赖单文件原型 (双击即用)
 │   └── index.html            # 高拟真车载巡查、8按键采集、IndexedDB离线模拟、Canvas GIS轨迹
 │
 └── docs/                     # 架构与运维技术文档
+    ├── TESTING_ANDROID.md    # Android 真机巡查闭环与离线优先验证手册
+    ├── ANDROID_BUILD.md      # Android APK 打包与编译构建指南
     ├── OFFLINE_FIRST.md      # 离线优先架构设计与 IndexedDB 规范
     ├── MOBILE_ARCHITECTURE.md# 车载移动巡查端 8 大按键与安全规范
     ├── SYNC_DESIGN.md        # 5 级优先级同步队列与客户端 UUID 幂等性设计
@@ -177,16 +180,14 @@ npx cap open android
 node --test shared/tests/shared.test.ts
 
 # 2. 运行服务端全套集成 API 与断网续传测试
-node --test server/tests/api.test.ts
-
-# 3. 运行生产级离线优先与幂等性全链路测试套件 (6大核心场景)
+# 3. 运行全量离线优先与真机规范自动化测试套件 (8大核心场景)
 npx tsx --test server/tests/offline-sync.test.ts
 
-# 4. 一键运行全量自动化测试
+# 4. 一键运行全量自动化测试 (21 项测试)
 npx tsx --test shared/tests/shared.test.ts server/tests/api.test.ts server/tests/offline-sync.test.ts
 ```
 
-### 核心测试覆盖：
+### 核心测试覆盖 (21 项自动化测试 100% 通过)：
 - [x] **WGS84 $\leftrightarrow$ GCJ-02 $\leftrightarrow$ BD-09** 高精度双向转换往返误差 $< 0.1$ 米测试；
 - [x] **道路中心线桩号投影**：输入 GPS 点自动拟合推算标称桩号（如 `K120+000`）；
 - [x] **巡查 Session 全生命周期**：创建会话 $\rightarrow$ 上传轨迹点 $\rightarrow$ 生成 PostGIS LineString $\rightarrow$ 结束会话；
@@ -194,7 +195,9 @@ npx tsx --test shared/tests/shared.test.ts server/tests/api.test.ts server/tests
 - [x] **移动端重启数据不丢失**：模拟应用销毁重启，IndexedDB 100% 完整恢复未同步项；
 - [x] **网络恢复 5 级优先级自动同步**：P1 会话 $\rightarrow$ P2 轨迹 $\rightarrow$ P3 路产与视频事件 $\rightarrow$ P4 照片 $\rightarrow$ P5 视频切片；
 - [x] **中断再续传与幂等性**：50% 视频断网不产生脏数据，恢复后继续上传；重试上传杜绝重复数据；
-- [x] **视频-路产联动与历史追溯**：通过路产 ID 关联视频切片与秒级帧偏移，不可覆盖变更记录保留。
+- [x] **视频-路产联动与历史追溯**：通过路产 ID 关联视频切片与秒级帧偏移，不可覆盖变更记录保留；
+- [x] **同步队列状态机生命周期**：`PENDING -> UPLOADING -> UPLOADED` 转移与失败指数退避重试；
+- [x] **真实硬件 GNSS 实体全规范与现场照片元数据联动**：高精度 `device_gnss` 数据结构校验与实景照片元数据上报查询。
 
 ---
 

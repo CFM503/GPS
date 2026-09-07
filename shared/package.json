@@ -1,6 +1,6 @@
 {
   "name": "@road-gis/shared",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "道路路产智能巡查与 GIS 管理系统 - 共享核心库",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

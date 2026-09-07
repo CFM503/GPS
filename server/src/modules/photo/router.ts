@@ -51,6 +51,32 @@ router.post('/upload', upload.single('photo'), (req, res) => {
   });
 });
 
+// POST /api/v1/photos/metadata (离线同步照片元数据)
+router.post('/metadata', (req, res) => {
+  const { id, asset_id, session_id, file_name, storage_path, storage_url, file_size_bytes, photo_time, latitude, longitude, azimuth } = req.body;
+  const photo: AssetPhoto = {
+    id: id || crypto.randomUUID(),
+    asset_id: asset_id || '',
+    session_id: session_id || '',
+    file_name: file_name || `PHOTO_${Date.now()}.jpg`,
+    storage_path: storage_path || '',
+    storage_url: storage_url || `/uploads/${file_name || 'photo.jpg'}`,
+    file_size_bytes: file_size_bytes || 0,
+    photo_time: photo_time || new Date().toISOString(),
+    latitude: latitude !== undefined ? parseFloat(latitude) : undefined,
+    longitude: longitude !== undefined ? parseFloat(longitude) : undefined,
+    azimuth: azimuth !== undefined ? parseFloat(azimuth) : undefined,
+  };
+
+  dbStore.addPhoto(photo);
+
+  res.status(201).json({
+    code: 201,
+    message: '照片元数据同步成功',
+    data: photo,
+  });
+});
+
 // GET /api/v1/photos/asset/:assetId
 router.get('/asset/:assetId', (req, res) => {
   const photos = dbStore.getPhotosByAsset(req.params.assetId);

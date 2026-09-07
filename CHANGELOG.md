@@ -2,6 +2,28 @@
 
 本文档记录“道路路产智能巡查与 GIS 管理系统”的所有重要版本迭代与功能变更。
 
+## [1.2.0] - 2026-09-07
+
+### Added
+- **真实 Android 巡查闭环与 Capacitor 原生容器接入 (`apps/mobile/android`)**：
+  - 生成 Capacitor 5 原生 Android 工程，配置 `build.gradle` 与 `AndroidManifest.xml`。
+  - 完整声明真实定位 (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`)、多媒体抓拍 (`CAMERA`, `RECORD_AUDIO`, `READ_MEDIA_IMAGES`)、前台服务保活 (`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION`, `WAKE_LOCK`) 及电池白名单 (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`)。
+- **真机硬件 GPS 定位引擎改造 (`gps.ts`)**：
+  - 废除无条件 Mock 模拟器，全面切换为真实硬件 GNSS 芯片定位 (`navigator.geolocation.watchPosition` + `enableHighAccuracy: true`)。
+  - 实时采集经纬度、车速、航向角、GNSS 精度及海拔高度，并附带错误自愈重试与硬件标记 (`device_gnss`)。
+- **现场实景快照多媒体服务 (`camera.ts` & `idbStorage.ts`)**：
+  - 移动巡查端新增现场拍照能力，抓拍快照自动生成唯一 UUID，打上当前 GPS 经纬度与时间戳，保存至 IndexedDB 本地库，并自动挂载 P4 照片同步任务。
+- **巡查驾驶仪表盘状态栏全面升级 (`PatrolDashboard.tsx` & `App.tsx`)**：
+  - 实时显示巡查状态、真实硬件 GPS 精度（如 `GPS 正常 ±3.2m`）、网络状态指示（`ONLINE`/`OFFLINE`/`SYNCING`）、行车车速、轨迹点计数、路产标记计数与待同步队列统计。
+- **服务端照片元数据与路产多媒体联动支持 (`modules/photo` & `modules/asset`)**：
+  - 新增 `POST /api/v1/photos/metadata` 接口，支持离线同步现场照片元数据。
+  - `GET /api/v1/assets/:id` 自动返回路产实体及其关联的多媒体实景照片列表。
+- **真机测试与构建指南文档**：
+  - 新增 `docs/TESTING_ANDROID.md`（涵盖真机权限授权、飞行模式离线巡查、进程强杀抗灾、恢复网络 5 级自动同步及 Web GIS 复核）。
+  - 新增 `docs/ANDROID_BUILD.md`（包含 Android Studio 与 Gradle 命令行 APK 打包指引）。
+- **自动化测试套件扩充**：
+  - `server/tests/offline-sync.test.ts` 新增场景 7（同步队列生命周期状态转移机与重试保护）与场景 8（真实 GNSS 数据规范与多媒体照片实体联动），全量 21 项自动化测试 100% 通过。
+
 ## [1.1.0] - 2026-09-07
 
 ### Added

@@ -94,10 +94,14 @@ router.get('/:id', (req, res) => {
     res.status(404).json({ code: 404, message: '路产不存在' });
     return;
   }
+  const photos = dbStore.getPhotosByAsset(req.params.id);
   res.json({
     code: 200,
     message: 'success',
-    data: asset,
+    data: {
+      ...asset,
+      photos,
+    },
   });
 });
 

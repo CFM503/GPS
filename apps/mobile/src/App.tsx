@@ -11,19 +11,25 @@ import { PatrolDashboard } from './components/PatrolDashboard.js';
 import { SyncQueueModal } from './components/SyncQueueModal.js';
 import { PendingAssetsModal } from './components/PendingAssetsModal.js';
 import { gpsTracker, GPSSignalStatus } from './services/gps.js';
-import { videoRecorder } from './services/camera.js';
+import { videoRecorder, photoManager } from './services/camera.js';
 import { syncManager } from './services/sync.js';
 import { offlineDb } from './services/db.js';
+import { permissionManager } from './services/permissions.js';
 
 export const App: React.FC = () => {
   const [patrolStatus, setPatrolStatus] = useState<PatrolStatus>('CREATED');
   const [currentSession, setCurrentSession] = useState<PatrolSession | null>(null);
   const [gpsPoint, setGpsPoint] = useState<GPSTrackPoint | null>(null);
-  const [gpsSignal, setGpsSignal] = useState<GPSSignalStatus>('EXCELLENT');
+  const [gpsSignal, setGpsSignal] = useState<GPSSignalStatus>('LOST');
+  const [gpsMessage, setGpsMessage] = useState<string>('');
+  const [trackCount, setTrackCount] = useState(0);
+  const [assetCount, setAssetCount] = useState(0);
+  const [lastAssetId, setLastAssetId] = useState<string | null>(null);
+
   const [videoDuration, setVideoDuration] = useState(0);
   const [sliceFileName, setSliceFileName] = useState('VIDEO_001.mp4');
 
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncState, setSyncState] = useState<{
     isSyncing: boolean;
@@ -42,7 +48,7 @@ export const App: React.FC = () => {
 
   const durationTimerRef = useRef<any>(null);
 
-  // G105 国道仿真线段顶点
+  // G105 国道仿真线段顶点 (用于自动标称桩号拟合)
   const g105Coords: [number, number][] = [
     [113.250000, 23.100000],
     [113.265000, 23.125000],
@@ -65,6 +71,21 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     updatePendingCount();
+
+    // 监听全生命周期实时网络状态切换 (ONLINE / OFFLINE / SYNCING)
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncManager.triggerSync();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+
     syncManager.onProgress((status) => {
       setSyncState({
         isSyncing: status.isSyncing,
@@ -76,12 +97,22 @@ export const App: React.FC = () => {
     });
 
     return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
       if (durationTimerRef.current) clearInterval(durationTimerRef.current);
     };
   }, []);
 
   // 1. 开始巡查
   const handleStartPatrol = async () => {
+    // 首次开启巡查前请求并确认定位权限
+    const perm = await permissionManager.requestLocationPermission();
+    if (!perm.granted) {
+      console.warn('[Permission]', perm.message);
+    }
+
     const sessionId = `PAT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const session: PatrolSession = {
@@ -106,6 +137,9 @@ export const App: React.FC = () => {
     setCurrentSession(session);
     setPatrolStatus('RUNNING');
     setVideoDuration(0);
+    setTrackCount(0);
+    setAssetCount(0);
+    setLastAssetId(null);
 
     // 存入离线 IndexedDB 并加入 P1 同步队列
     await offlineDb.saveSession(session);
@@ -121,14 +155,16 @@ export const App: React.FC = () => {
       retry_count: 0,
     });
 
-    // 启动 GPS 采集
-    await gpsTracker.start(sessionId, (pt, signal) => {
+    // 启动真实硬件 GPS 采集 (真机默认纯硬件 GPS)
+    await gpsTracker.start(sessionId, (pt, signal, msg) => {
       setGpsPoint(pt);
       setGpsSignal(signal);
+      if (msg) setGpsMessage(msg);
+      setTrackCount(gpsTracker.getRecordedPointCount());
       updatePendingCount();
     });
 
-    // 启动录像
+    // 启动分段切片录像
     videoRecorder.startRecording(sessionId);
     const slice = videoRecorder.getCurrentSlice();
     if (slice) setSliceFileName(slice.file_name);
@@ -206,7 +242,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // 5. 8大车载物理/大触控按键一键极速秒级采集
+  // 5. 8大车载大触控按键一键极速秒级采集
   const handleQuickCollect = async (typeId: string, typeName: string, isAnomaly: boolean = false) => {
     if (!currentSession) return;
 
@@ -215,11 +251,11 @@ export const App: React.FC = () => {
       point_time: new Date().toISOString(),
       latitude: 23.150000,
       longitude: 113.280000,
-      speed_kmh: 60,
-      heading: 45,
+      speed_kmh: 0,
+      heading: 0,
       altitude: 20,
-      accuracy: 4,
-      provider: 'gnss_rtk',
+      accuracy: 10,
+      provider: 'device_gnss',
       is_valid: true,
     };
 
@@ -258,6 +294,8 @@ export const App: React.FC = () => {
 
     // 1. 保存路产主记录到 IndexedDB
     await offlineDb.saveAsset(asset);
+    setLastAssetId(assetId);
+    setAssetCount((prev) => prev + 1);
 
     // 2. 生成绑定的视频证据事件 (VideoEvent)
     const videoEvent = videoRecorder.recordVideoEvent(
@@ -321,6 +359,27 @@ export const App: React.FC = () => {
     }
   };
 
+  // 6. 现场相机拍照支持
+  const handleCapturePhoto = async (photoDataUrl: string) => {
+    if (!currentSession) {
+      alert('请先开启巡查');
+      return;
+    }
+
+    const targetAssetId = lastAssetId || `PHOTO-TARGET-${Date.now()}`;
+    await photoManager.capturePhoto(
+      targetAssetId,
+      currentSession.id,
+      photoDataUrl,
+      gpsPoint ? { latitude: gpsPoint.latitude, longitude: gpsPoint.longitude } : undefined
+    );
+
+    await updatePendingCount();
+    if (isOnline) {
+      syncManager.triggerSync();
+    }
+  };
+
   return (
     <div className="w-screen h-screen overflow-hidden bg-black font-sans select-none">
       <PatrolDashboard
@@ -330,8 +389,12 @@ export const App: React.FC = () => {
         onResumePatrol={handleResumePatrol}
         onStopPatrol={handleStopPatrol}
         onQuickCollect={handleQuickCollect}
+        onCapturePhoto={handleCapturePhoto}
         gpsPoint={gpsPoint}
         gpsSignal={gpsSignal}
+        gpsMessage={gpsMessage}
+        trackCount={trackCount}
+        assetCount={assetCount}
         videoDurationSecs={videoDuration}
         sliceFileName={sliceFileName}
         isOnline={isOnline}

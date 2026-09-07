@@ -13,12 +13,17 @@ import gisRouter from './modules/gis/router.js';
 import maintenanceRouter from './modules/maintenance/router.js';
 import statsRouter from './modules/stats/router.js';
 import exportRouter from './modules/export/router.js';
+import appUpdateRouter from './modules/app-update/router.js';
 
 export function createApp(): Express {
   const app = express();
 
   // 中间件配置
-  app.use(cors({ origin: true, credentials: true }));
+  app.use(cors({
+    origin: true,
+    credentials: true,
+    exposedHeaders: ['Content-Length', 'Content-Disposition']
+  }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -47,6 +52,7 @@ export function createApp(): Express {
   app.use('/api/v1/maintenance', maintenanceRouter);
   app.use('/api/v1/stats', statsRouter);
   app.use('/api/v1/export', exportRouter);
+  app.use('/api/v1/app', appUpdateRouter);
 
   // 全局 404
   app.use((req: Request, res: Response) => {

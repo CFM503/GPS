@@ -21,8 +21,15 @@
 - **真机测试与构建指南文档**：
   - 新增 `docs/TESTING_ANDROID.md`（涵盖真机权限授权、飞行模式离线巡查、进程强杀抗灾、恢复网络 5 级自动同步及 Web GIS 复核）。
   - 新增 `docs/ANDROID_BUILD.md`（包含 Android Studio 与 Gradle 命令行 APK 打包指引）。
-- **自动化测试套件扩充**：
-  - `server/tests/offline-sync.test.ts` 新增场景 7（同步队列生命周期状态转移机与重试保护）与场景 8（真实 GNSS 数据规范与多媒体照片实体联动），全量 21 项自动化测试 100% 通过。
+- **面向中国网络环境的 Android 在线自动更新 (OTA) 系统**：
+  - **国内多源智能降级下载架构**：针对国内无 Google Play、GitHub Releases 直链高丢包以及公路局专网/内网特点，设计并实现 4 级智能备用下载源切换：公路管理处局域网直连源 (专网首选，无外网依赖) $\rightarrow$ GHProxy 国内免翻墙加速镜像 (`mirror.ghproxy.com`) $\rightarrow$ 国内备用节点 (`ghproxy.net`) $\rightarrow$ GitHub 官方直链兜底。
+  - **语义化版本比对与强制更新**：实现严格 Semver 比对算法，支持服务端下发 `min_supported_version` 与 `is_force_update` 协议拦截；当客户端版本落后于系统兼容底线时强制锁定，杜绝旧版协议漏洞。
+  - **车载端更新交互与测速进度条 (`UpdateModal.tsx`)**：设计移动端暗黑风格弹窗，实时显示发布说明、安装包体积、多源流式读取下载进度百分比、实时瞬时网速（MB/s）与错误自愈提示。
+  - **中国 Android 厂商系统安装兼容保障**：配置 `REQUEST_INSTALL_PACKAGES` 权限与 FileProvider 路径；提供“外部浏览器直接下载”降级通道，完美适配小米 MIUI/澎湃OS、华为鸿蒙、OPPO、vivo 等国内主流车载/手机厂商系统的原生包安装器。
+  - **离线巡查静默友好**：深山弱网/飞行模式下静默跳过启动检查，杜绝弹窗干扰行车巡查；手动点击版本徽章时智能区分网络异常与已是最新版本。
+- **自动化测试套件扩充 (总计 25 项测试全部通过)**：
+  - `server/tests/offline-sync.test.ts` 覆盖 8 大离线同步与真机容灾场景。
+  - 新增 `server/tests/app-update.test.ts`，覆盖 Semver 比对算法边界、国内镜像动态解析、强制升级拦截与本地 APK 文件流/302 重定向下载。全套 25 项自动化测试 100% 通过。
 
 ## [1.1.0] - 2026-09-07
 

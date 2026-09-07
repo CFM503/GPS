@@ -248,3 +248,26 @@ export interface SyncQueueItem {
   updated_at: string;
 }
 
+export interface UpdateMirrorSource {
+  id: string;
+  name: string;
+  url: string;
+  network_type: 'INTRANET' | 'DOMESTIC_MIRROR' | 'OFFICIAL_DIRECT';
+  recommended?: boolean;
+}
+
+export interface AppVersionInfo {
+  latest_version: string;
+  version_code: number;
+  min_supported_version: string;
+  is_force_update: boolean;
+  title: string;
+  release_notes: string[];
+  publish_time: string;
+  file_size_bytes: number;
+  file_size_formatted: string;
+  apk_hash_sha256?: string;
+  download_url: string;
+  mirrors: UpdateMirrorSource[];
+}
+

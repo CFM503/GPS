@@ -173,21 +173,26 @@ npx cap open android
 
 ## 自动化测试与验证套件
 
-本项目配备完备的算法单元测试、离线同步套件与端到端集成测试（共 19 项全部通过）：
+本项目配备完备的算法单元测试、离线同步套件、多源更新套件与端到端集成测试（共 25 项全部通过）：
 
 ```bash
 # 1. 运行核心共享库单元测试 (坐标系互转、桩号折线投影、Haversine算法)
 node --test shared/tests/shared.test.ts
 
 # 2. 运行服务端全套集成 API 与断网续传测试
+npx tsx --test server/tests/api.test.ts
+
 # 3. 运行全量离线优先与真机规范自动化测试套件 (8大核心场景)
 npx tsx --test server/tests/offline-sync.test.ts
 
-# 4. 一键运行全量自动化测试 (21 项测试)
-npx tsx --test shared/tests/shared.test.ts server/tests/api.test.ts server/tests/offline-sync.test.ts
+# 4. 运行国内多源在线自动更新与 Semver 测试套件
+npx tsx --test server/tests/app-update.test.ts
+
+# 5. 一键运行全量自动化测试 (25 项测试)
+npm test
 ```
 
-### 核心测试覆盖 (21 项自动化测试 100% 通过)：
+### 核心测试覆盖 (25 项自动化测试 100% 通过)：
 - [x] **WGS84 $\leftrightarrow$ GCJ-02 $\leftrightarrow$ BD-09** 高精度双向转换往返误差 $< 0.1$ 米测试；
 - [x] **道路中心线桩号投影**：输入 GPS 点自动拟合推算标称桩号（如 `K120+000`）；
 - [x] **巡查 Session 全生命周期**：创建会话 $\rightarrow$ 上传轨迹点 $\rightarrow$ 生成 PostGIS LineString $\rightarrow$ 结束会话；
@@ -197,7 +202,8 @@ npx tsx --test shared/tests/shared.test.ts server/tests/api.test.ts server/tests
 - [x] **中断再续传与幂等性**：50% 视频断网不产生脏数据，恢复后继续上传；重试上传杜绝重复数据；
 - [x] **视频-路产联动与历史追溯**：通过路产 ID 关联视频切片与秒级帧偏移，不可覆盖变更记录保留；
 - [x] **同步队列状态机生命周期**：`PENDING -> UPLOADING -> UPLOADED` 转移与失败指数退避重试；
-- [x] **真实硬件 GNSS 实体全规范与现场照片元数据联动**：高精度 `device_gnss` 数据结构校验与实景照片元数据上报查询。
+- [x] **真实硬件 GNSS 实体全规范与现场照片元数据联动**：高精度 `device_gnss` 数据结构校验与实景照片元数据上报查询；
+- [x] **国内多源在线自动更新系统 (4级备用源)**：Semver 语义化版本算法、强制升级拦截、局域网内网首选与国内免翻墙 CDN 镜像、APK 文件流服务与 302 重定向。
 
 ---
 

@@ -10,11 +10,14 @@ import {
 import { PatrolDashboard } from './components/PatrolDashboard.js';
 import { SyncQueueModal } from './components/SyncQueueModal.js';
 import { PendingAssetsModal } from './components/PendingAssetsModal.js';
+import { UpdateModal } from './components/UpdateModal.js';
 import { gpsTracker, GPSSignalStatus } from './services/gps.js';
 import { videoRecorder, photoManager } from './services/camera.js';
 import { syncManager } from './services/sync.js';
 import { offlineDb } from './services/db.js';
 import { permissionManager } from './services/permissions.js';
+import { appUpdater, CURRENT_APP_VERSION } from './services/updater.js';
+import { AppVersionInfo } from '@road-gis/shared';
 
 export const App: React.FC = () => {
   const [patrolStatus, setPatrolStatus] = useState<PatrolStatus>('CREATED');
@@ -45,6 +48,39 @@ export const App: React.FC = () => {
 
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppVersionInfo | null>(null);
+  const [isForceUpdate, setIsForceUpdate] = useState(false);
+  const [hasNewVersion, setHasNewVersion] = useState(false);
+
+  const handleCheckUpdate = async (isManual: boolean = false) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine && isManual) {
+      alert('当前处于离线状态，无法连接服务器检测更新。');
+      return;
+    }
+    try {
+      const res = await appUpdater.checkUpdate(CURRENT_APP_VERSION);
+      if (res.hasUpdate && res.versionInfo) {
+        setUpdateInfo(res.versionInfo);
+        setIsForceUpdate(res.isForceUpdate);
+        setHasNewVersion(true);
+        setShowUpdateModal(true);
+      } else {
+        setHasNewVersion(false);
+        if (isManual) {
+          if (res.errorMessage) {
+            alert(`检查更新遇到问题: ${res.errorMessage}`);
+          } else {
+            alert(`当前已是最新版本 (v${CURRENT_APP_VERSION})！`);
+          }
+        }
+      }
+    } catch {
+      if (isManual) {
+        alert('检查版本更新服务暂时不可用，请稍后再试。');
+      }
+    }
+  };
 
   const durationTimerRef = useRef<any>(null);
 
@@ -71,6 +107,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     updatePendingCount();
+    handleCheckUpdate(false);
 
     // 监听全生命周期实时网络状态切换 (ONLINE / OFFLINE / SYNCING)
     const handleOnline = () => {
@@ -402,6 +439,8 @@ export const App: React.FC = () => {
         pendingCount={pendingCount}
         onOpenSync={() => setShowSyncModal(true)}
         onOpenPending={() => setShowPendingModal(true)}
+        onCheckUpdate={() => handleCheckUpdate(true)}
+        hasNewVersion={hasNewVersion}
       />
 
       {/* 离线队列与断点续传弹窗 */}
@@ -427,6 +466,16 @@ export const App: React.FC = () => {
             setShowPendingModal(false);
             updatePendingCount();
           }}
+        />
+      )}
+
+      {/* 在线更新升级弹窗 */}
+      {showUpdateModal && updateInfo && (
+        <UpdateModal
+          isOpen={showUpdateModal}
+          versionInfo={updateInfo}
+          isForceUpdate={isForceUpdate}
+          onClose={() => setShowUpdateModal(false)}
         />
       )}
     </div>

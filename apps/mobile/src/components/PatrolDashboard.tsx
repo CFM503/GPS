@@ -21,9 +21,11 @@ import {
   Signal,
   CheckCircle2,
   Camera,
-  MapPin
+  MapPin,
+  Sparkles
 } from 'lucide-react';
 import { GPSTrackPoint, PatrolStatus } from '@road-gis/shared';
+import { CURRENT_APP_VERSION } from '../services/updater.js';
 
 interface PatrolDashboardProps {
   patrolStatus: PatrolStatus;
@@ -45,6 +47,8 @@ interface PatrolDashboardProps {
   pendingCount: number;
   onOpenSync: () => void;
   onOpenPending: () => void;
+  onCheckUpdate?: () => void;
+  hasNewVersion?: boolean;
 }
 
 export const PatrolDashboard: React.FC<PatrolDashboardProps> = ({
@@ -67,6 +71,8 @@ export const PatrolDashboard: React.FC<PatrolDashboardProps> = ({
   pendingCount,
   onOpenSync,
   onOpenPending,
+  onCheckUpdate,
+  hasNewVersion,
 }) => {
   const [activeFeedback, setActiveFeedback] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,6 +183,19 @@ export const PatrolDashboard: React.FC<PatrolDashboardProps> = ({
               {isPatrolling ? `REC ${formatSecs(videoDurationSecs)}` : '录像就绪'}
             </span>
           </div>
+
+          {/* 版本号与在线更新检测按钮 */}
+          <button
+            onClick={onCheckUpdate}
+            title="点击检查最新系统版本"
+            className="flex items-center gap-1 bg-slate-950 hover:bg-slate-800 active:bg-slate-700 px-2 py-1 rounded-xl border border-slate-800 text-slate-400 hover:text-blue-300 transition cursor-pointer"
+          >
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            <span className="font-mono text-[11px]">v{CURRENT_APP_VERSION}</span>
+            {hasNewVersion && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+            )}
+          </button>
         </div>
 
         {/* 下行：遥测指标 (坐标、车速、轨迹点数量、路产数量、待同步数量) */}

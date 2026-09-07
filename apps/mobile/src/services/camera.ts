@@ -1,4 +1,4 @@
-import { VideoSlice } from '@road-gis/shared';
+import { VideoSlice, VideoEvent, VideoEventType } from '@road-gis/shared';
 import { offlineDb } from './db.js';
 
 export class VideoRecorder {
@@ -7,15 +7,17 @@ export class VideoRecorder {
   private currentSlice: VideoSlice | null = null;
   private sliceStartTime: number = 0;
   private timer: any = null;
+  private isPaused: boolean = false;
 
   startRecording(sessionId: string) {
     this.sessionId = sessionId;
     this.sliceIndex = 1;
+    this.isPaused = false;
     this.startNewSlice();
 
-    // 监控切片时长（真实环境每5分钟切片，演示环境每5分钟切片逻辑完备）
+    // 监控切片时长（每5分钟切片，低传输失败成本）
     this.timer = setInterval(() => {
-      if (this.currentSlice) {
+      if (this.currentSlice && !this.isPaused) {
         const now = Date.now();
         const elapsedSecs = (now - this.sliceStartTime) / 1000;
         this.currentSlice.duration_seconds = Math.round(elapsedSecs);
@@ -27,6 +29,14 @@ export class VideoRecorder {
         }
       }
     }, 1000);
+  }
+
+  pauseRecording() {
+    this.isPaused = true;
+  }
+
+  resumeRecording() {
+    this.isPaused = false;
   }
 
   stopRecording(): VideoSlice | null {
@@ -44,6 +54,27 @@ export class VideoRecorder {
   getCurrentOffsetSeconds(): number {
     if (!this.sliceStartTime) return 0;
     return Math.round((Date.now() - this.sliceStartTime) / 1000);
+  }
+
+  /**
+   * 创建视频与路产发现绑定的绝对时间戳证据事件 (VideoEvent)
+   */
+  recordVideoEvent(assetId: string, eventType: VideoEventType = 'ASSET_DETECTED', description?: string): VideoEvent | null {
+    if (!this.currentSlice) return null;
+    const offset = this.getCurrentOffsetSeconds();
+    const event: VideoEvent = {
+      id: crypto.randomUUID(),
+      session_id: this.sessionId,
+      video_id: this.currentSlice.id,
+      asset_id: assetId,
+      event_type: eventType,
+      timestamp: new Date().toISOString(),
+      video_offset_seconds: offset,
+      description: description || '',
+      created_at: new Date().toISOString(),
+    };
+    offlineDb.saveVideoEvent(event);
+    return event;
   }
 
   private startNewSlice() {
@@ -76,7 +107,7 @@ export class VideoRecorder {
     this.currentSlice.end_time = new Date().toISOString();
     offlineDb.saveVideoSlice(this.currentSlice);
 
-    // 生成 P5 视频切片上传任务
+    // 生成 P5 视频切片上传任务 (含客户端 UUID 与幂等性保护)
     offlineDb.saveTask({
       id: crypto.randomUUID(),
       session_id: this.sessionId,

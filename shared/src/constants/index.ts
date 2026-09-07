@@ -21,11 +21,35 @@ export const ASSET_STATUSES = {
 export type AssetStatus = typeof ASSET_STATUSES[keyof typeof ASSET_STATUSES];
 
 export const PATROL_STATUSES = {
-  IN_PROGRESS: 'IN_PROGRESS',
+  CREATED: 'CREATED',
+  RUNNING: 'RUNNING',
+  IN_PROGRESS: 'IN_PROGRESS', // 向后兼容别名
+  PAUSED: 'PAUSED',
   COMPLETED: 'COMPLETED',
+  SYNCING: 'SYNCING',
+  SYNCED: 'SYNCED',
+  FAILED: 'FAILED',
   CANCELLED: 'CANCELLED',
 } as const;
 export type PatrolStatus = typeof PATROL_STATUSES[keyof typeof PATROL_STATUSES];
+
+export const VIDEO_EVENT_TYPES = {
+  ASSET_DETECTED: 'ASSET_DETECTED',     // 路产自动/手动发现
+  ANOMALY_FLAGGED: 'ANOMALY_FLAGGED',   // 异常告警标记
+  MANUAL_BOOKMARK: 'MANUAL_BOOKMARK',   // 巡检员手动书签
+} as const;
+export type VideoEventType = typeof VIDEO_EVENT_TYPES[keyof typeof VIDEO_EVENT_TYPES];
+
+export const ASSET_ACTION_TYPES = {
+  FIRST_DISCOVERY: 'FIRST_DISCOVERY',         // 首次建档发现
+  AUDIT_CONFIRMED: 'AUDIT_CONFIRMED',         // 审核确认正式资产
+  ANOMALY_REPORTED: 'ANOMALY_REPORTED',       // 标记异常/破损
+  MAINTENANCE_ASSIGNED: 'MAINTENANCE_ASSIGNED', // 派发维修
+  MAINTENANCE_COMPLETED: 'MAINTENANCE_COMPLETED', // 维修修复完成
+  RE_INSPECTED: 'RE_INSPECTED',               // 再次巡查核实
+  STATUS_CHANGED: 'STATUS_CHANGED',           // 状态属性调整
+} as const;
+export type AssetActionType = typeof ASSET_ACTION_TYPES[keyof typeof ASSET_ACTION_TYPES];
 
 export const SYNC_STATUSES = {
   PENDING: 'PENDING',

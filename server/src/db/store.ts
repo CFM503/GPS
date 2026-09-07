@@ -10,6 +10,8 @@ import {
   GPSTrackPoint,
   PatrolSession,
   VideoSlice,
+  VideoEvent,
+  AssetHistoryRecord,
   MaintenanceRecord,
   UploadTask,
   GeoLineString,
@@ -39,8 +41,10 @@ export class DataStore {
   private patrolSessions: Map<string, PatrolSession> = new Map();
   private patrolTracks: Map<string, GPSTrackPoint[]> = new Map(); // sessionId -> tracks
   private assets: Map<string, Asset> = new Map();
+  private assetHistory: Map<string, AssetHistoryRecord[]> = new Map(); // assetId -> history records
   private assetPhotos: Map<string, AssetPhoto[]> = new Map(); // assetId -> photos
   private videoSlices: Map<string, VideoSlice> = new Map();
+  private videoEvents: Map<string, VideoEvent> = new Map(); // videoEventId -> VideoEvent
   private maintenanceRecords: Map<string, MaintenanceRecord> = new Map();
   private uploadTasks: Map<string, UploadTask> = new Map();
   private auditLogs: AuditLogEntry[] = [];
@@ -435,6 +439,12 @@ export class DataStore {
   // --- Patrol Sessions ---
   createPatrolSession(sessionData: Partial<PatrolSession>): PatrolSession {
     const id = sessionData.id || `PAT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (this.patrolSessions.has(id)) {
+      const existing = this.patrolSessions.get(id)!;
+      Object.assign(existing, sessionData);
+      existing.updated_at = new Date().toISOString();
+      return existing;
+    }
     const session: PatrolSession = {
       id,
       user_id: sessionData.user_id || '',
@@ -508,10 +518,13 @@ export class DataStore {
     }
     const list = this.patrolTracks.get(sessionId)!;
 
-    // 清洗漂移点并追加
+    // 清洗漂移点并追加 (去重避免网络重发产生重复轨迹点)
+    const existingTimes = new Set(list.map((p) => p.point_time));
     for (const p of points) {
+      if (existingTimes.has(p.point_time)) continue;
       p.is_valid = p.accuracy <= 50; // 精度50米内有效
       list.push(p);
+      existingTimes.add(p.point_time);
     }
 
     // 重新计算里程
@@ -539,6 +552,12 @@ export class DataStore {
   // --- Assets ---
   createAsset(assetData: Partial<Asset>): Asset {
     const id = assetData.id || crypto.randomUUID();
+    if (this.assets.has(id)) {
+      const existing = this.assets.get(id)!;
+      Object.assign(existing, assetData);
+      existing.updated_at = new Date().toISOString();
+      return existing;
+    }
     const road = this.roads.get(assetData.road_id || '') || Array.from(this.roads.values())[0];
     const assetType = this.assetTypes.get(assetData.type_id || 'OTHER') || this.assetTypes.get('OTHER')!;
 
@@ -618,12 +637,19 @@ export class DataStore {
     return asset;
   }
 
-  getAssetById(id: string): Asset | undefined {
+  getAssetById(id: string): (Asset & { history?: AssetHistoryRecord[]; video_events?: VideoEvent[] }) | undefined {
     const asset = this.assets.get(id);
     if (asset) {
       asset.photos = this.assetPhotos.get(id) || [];
+      const history = this.getAssetHistory(id);
+      const videoEvents = this.getVideoEvents({ assetId: id });
+      return {
+        ...asset,
+        history,
+        video_events: videoEvents,
+      };
     }
-    return asset;
+    return undefined;
   }
 
   listAssets(filter?: {
@@ -652,11 +678,54 @@ export class DataStore {
 
   // --- Video Slices & Resumable Upload ---
   registerVideoSlice(slice: VideoSlice): VideoSlice {
+    if (this.videoSlices.has(slice.id)) {
+      const existing = this.videoSlices.get(slice.id)!;
+      Object.assign(existing, slice);
+      return existing;
+    }
     this.videoSlices.set(slice.id, slice);
     if (slice.session_id && this.patrolSessions.has(slice.session_id)) {
       this.patrolSessions.get(slice.session_id)!.video_count += 1;
     }
     return slice;
+  }
+
+  // --- Video Events ---
+  addVideoEvent(event: VideoEvent): VideoEvent {
+    if (this.videoEvents.has(event.id)) {
+      const existing = this.videoEvents.get(event.id)!;
+      Object.assign(existing, event);
+      return existing;
+    }
+    this.videoEvents.set(event.id, event);
+    return event;
+  }
+
+  getVideoEvents(filter?: { sessionId?: string; assetId?: string; videoId?: string }): VideoEvent[] {
+    let list = Array.from(this.videoEvents.values());
+    if (filter?.sessionId) list = list.filter((e) => e.session_id === filter.sessionId);
+    if (filter?.assetId) list = list.filter((e) => e.asset_id === filter.assetId);
+    if (filter?.videoId) list = list.filter((e) => e.video_id === filter.videoId);
+    return list;
+  }
+
+  // --- Asset History ---
+  addAssetHistory(record: AssetHistoryRecord): AssetHistoryRecord {
+    if (!this.assetHistory.has(record.asset_id)) {
+      this.assetHistory.set(record.asset_id, []);
+    }
+    const list = this.assetHistory.get(record.asset_id)!;
+    const existing = list.find((r) => r.id === record.id);
+    if (existing) {
+      Object.assign(existing, record);
+      return existing;
+    }
+    list.push(record);
+    return record;
+  }
+
+  getAssetHistory(assetId: string): AssetHistoryRecord[] {
+    return this.assetHistory.get(assetId) || [];
   }
 
   getVideoSlice(id: string): VideoSlice | undefined {

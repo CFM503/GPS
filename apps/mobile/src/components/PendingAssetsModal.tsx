@@ -8,20 +8,47 @@ interface PendingAssetsModalProps {
 }
 
 export const PendingAssetsModal: React.FC<PendingAssetsModalProps> = ({ onClose }) => {
-  const [assets, setAssets] = useState(offlineDb.getAssets());
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [descInput, setDescInput] = useState('');
+
+  const loadAssets = async () => {
+    const list = await offlineDb.getAssets();
+    setAssets(list);
+  };
+
+  React.useEffect(() => {
+    loadAssets();
+  }, []);
 
   const handleEdit = (a: Asset) => {
     setEditingAsset(a);
     setDescInput(a.description || '');
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingAsset) return;
+    const oldDesc = editingAsset.description;
     editingAsset.description = descInput;
-    offlineDb.saveAsset(editingAsset);
-    setAssets(offlineDb.getAssets());
+    await offlineDb.saveAsset(editingAsset);
+
+    // 记录不可覆盖的历史变更
+    await offlineDb.addAssetHistory({
+      id: crypto.randomUUID(),
+      asset_id: editingAsset.id,
+      action: 'STATUS_CHANGED',
+      operator_id: '22222222-2222-2222-2222-222222222222',
+      operator_name: '张三 (车载移动巡查端)',
+      new_status: editingAsset.status,
+      previous_status: editingAsset.status,
+      latitude: editingAsset.latitude,
+      longitude: editingAsset.longitude,
+      milepost: editingAsset.milepost,
+      notes: `停车阶段安全文字补录: ${descInput}`,
+      timestamp: new Date().toISOString(),
+    });
+
+    await loadAssets();
     setEditingAsset(null);
   };
 

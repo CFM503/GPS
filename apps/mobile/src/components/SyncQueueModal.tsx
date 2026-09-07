@@ -14,9 +14,18 @@ export const SyncQueueModal: React.FC<SyncQueueModalProps> = ({
   isOnline,
   onToggleOnline,
 }) => {
-  const [tasks, setTasks] = useState(offlineDb.getTasks());
+  const [tasks, setTasks] = useState<any[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
+
+  const loadTasks = async () => {
+    const list = await offlineDb.getTasks();
+    setTasks(list);
+  };
+
+  React.useEffect(() => {
+    loadTasks();
+  }, []);
 
   const handleManualSync = async () => {
     if (!isOnline) {
@@ -26,7 +35,7 @@ export const SyncQueueModal: React.FC<SyncQueueModalProps> = ({
     setSyncing(true);
     setStatusMsg('正在按 5 级优先级同步...');
     const result = await syncManager.triggerSync();
-    setTasks(offlineDb.getTasks());
+    await loadTasks();
     setSyncing(false);
     setStatusMsg(result.synced > 0 ? `同步成功！已上传 ${result.synced} 项` : '全部队列已处于同步状态');
   };

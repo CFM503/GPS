@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>道路路产智能巡查与 GIS 管理系统 - 车载移动巡查离线原型</title>
+  <style>
+    :root {
+      --bg-main: #0b0f19;
+      --bg-card: #131b2e;
+      --bg-card-hover: #1c2742;
+      --border-color: #233252;
+      --accent-cyan: #06b6d4;
+      --accent-blue: #3b82f6;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --accent-amber: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Top Status Bar */
+    header {
+      background: #0f172a;
+      border-bottom: 1px solid var(--border-color);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      height: 54px;
+      flex-shrink: 0;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .badge-online {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+    .badge-offline {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: rgba(244, 63, 94, 0.4);
+      color: #fb7185;
+    }
+    .badge-rec {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+    .badge-gnss {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: rgba(6, 182, 212, 0.4);
+      color: #38bdf8;
+    }
+    .badge-queue {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+    }
+    /* Layout Container */
+    .app-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 480px 1fr;
+      overflow: hidden;
+    }
+    @media (max-width: 960px) {
+      .app-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+        overflow-y: auto;
+      }
+    }
+    /* Left Panel: Vehicle Dashboard & 8 Big Buttons */
+    .patrol-panel {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      border-right: 1px solid var(--border-color);
+      overflow-y: auto;
+      background: #0d1322;
+    }
+    .vehicle-telemetry {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      text-align: center;
+    }
+    .tele-val {
+      font-size: 18px;
+      font-weight: 800;
+      font-family: monospace;
+      color: var(--accent-cyan);
+    }
+    .tele-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .patrol-controls {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-main {
+      flex: 1;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-start {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: white;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    }
+    .btn-pause {
+      background: linear-gradient(135deg, #d97706, #f59e0b);
+      color: white;
+    }
+    .btn-stop {
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: white;
+    }
+    .btn-main:active {
+      transform: scale(0.97);
+    }
+    /* 8 Big Buttons Grid (Touch-friendly 72px+) */
+    .asset-buttons-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .asset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .touch-btn {
+      height: 76px;
+      border-radius: 14px;
+      border: 2px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 15px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+      transition: all 0.1s ease;
+    }
+    .touch-btn:active {
+      transform: scale(0.93);
+      filter: brightness(1.3);
+    }
+    .touch-btn .icon {
+      font-size: 24px;
+    }
+    .touch-btn-anomaly {
+      border-color: rgba(239, 68, 68, 0.6);
+      background: linear-gradient(145deg, rgba(220, 38, 38, 0.2), #1f1218);
+      color: #fca5a5;
+    }
+    .touch-btn-sign {
+      border-color: rgba(59, 130, 246, 0.5);
+    }
+    .touch-btn-post {
+      border-color: rgba(6, 182, 212, 0.5);
+    }
+    .touch-btn-rail {
+      border-color: rgba(168, 85, 247, 0.5);
+    }
+    .touch-btn-tree {
+      border-color: rgba(34, 197, 94, 0.5);
+    }
+    .touch-btn-light {
+      border-color: rgba(234, 179, 8, 0.5);
+    }
+    .touch-btn-facility {
+      border-color: rgba(249, 115, 22, 0.5);
+    }
+    .touch-btn-other {
+      border-color: rgba(148, 163, 184, 0.5);
+    }
+    /* Right Panel: GIS Map & Data Tabs */
+    .gis-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #090d16;
+    }
+    .tab-bar {
+      display: flex;
+      background: #0f172a;
+      border-bottom: 1px solid var(--border-color);
+      padding: 0 12px;
+    }
+    .tab-item {
+      padding: 12px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab-item.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+    }
+    .tab-content {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      padding: 14px;
+    }
+    .tab-content.active {
+      display: flex;
+    }
+    /* Map Canvas */
+    .map-box {
+      flex: 1;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      position: relative;
+      background: #080c14;
+    }
+    canvas#gisCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .map-overlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(6px);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      border: 1px solid var(--border-color);
+      pointer-events: none;
+    }
+    /* Asset List & Queue List */
+    .record-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+    .record-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .record-card:hover {
+      background: var(--bg-card-hover);
+    }
+    .record-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      font-family: monospace;
+    }
+    .sync-progress-bar {
+      height: 8px;
+      background: #1e293b;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .sync-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #06b6d4, #10b981);
+      transition: width 0.3s ease;
+    }
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid var(--accent-cyan);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      transition: transform 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+      z-index: 9999;
+      pointer-events: none;
+    }
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Status Bar -->
+  <header>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-weight: 800; font-size: 15px; letter-spacing: -0.3px; color: #38bdf8;">
+        🛣️ 道路路产车载巡查
+      </span>
+      <span style="font-size: 12px; color: var(--text-muted); font-family: monospace;">(G105 国道仿真)</span>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <!-- 在线/离线网络仿真开关 -->
+      <div id="netBadge" class="badge badge-online" onclick="toggleOnline()" title="点击切换 在线/离线 状态">
+        <span id="netDot">🟢</span>
+        <span id="netText">仿真模式: 在线</span>
+      </div>
+
+      <!-- GNSS 精度状态 -->
+      <div class="badge badge-gnss">
+        <span>📡</span>
+        <span id="gnssText">RTK 高精 (3.2m)</span>
+      </div>
+
+      <!-- 录像切片状态 -->
+      <div id="recBadge" class="badge badge-rec">
+        <span>⏺️</span>
+        <span id="recText">REC 00:00</span>
+      </div>
+
+      <!-- 同步队列状态 -->
+      <div id="queueBadge" class="badge badge-queue" onclick="switchTab('queue')">
+        <span>☁️</span>
+        <span id="queueText">待同步: 0 项</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- App Body Layout -->
+  <div class="app-body">
+    <!-- Left Patrol Console -->
+    <div class="patrol-panel">
+      <!-- 车辆遥测仪表盘 -->
+      <div class="vehicle-telemetry">
+        <div>
+          <div class="tele-val" id="dispSpeed">0.0</div>
+          <div class="tele-lbl">车速 km/h</div>
+        </div>
+        <div>
+          <div class="tele-val" id="dispMilepost">K127+000</div>
+          <div class="tele-lbl">推算标称桩号</div>
+        </div>
+        <div>
+          <div class="tele-val" id="dispAssetCount">0</div>
+          <div class="tele-lbl">本次采集路产</div>
+        </div>
+      </div>
+
+      <!-- 巡查主流程控制按钮 -->
+      <div class="patrol-controls">
+        <button id="btnStart" class="btn-main btn-start" onclick="startPatrol()">
+          <span>▶</span> 开始巡查
+        </button>
+        <button id="btnPause" class="btn-main btn-pause" onclick="pausePatrol()" style="display: none;">
+          <span>⏸</span> 暂停巡查
+        </button>
+        <button id="btnStop" class="btn-main btn-stop" onclick="stopPatrol()" style="display: none;">
+          <span>⏹</span> 结束巡查
+        </button>
+      </div>
+
+      <!-- 8 个大触控防误触按键 -->
+      <div class="asset-buttons-title">
+        <span>快速路产采集 (行车一键秒级标记)</span>
+        <span id="patrolStateTag" style="font-size: 11px; color: #e2e8f0; font-family: monospace;">[就绪]</span>
+      </div>
+
+      <div class="asset-grid">
+        <button class="touch-btn touch-btn-sign" onclick="quickCollect('TRAFFIC_SIGN', '交通标识牌')">
+          <span class="icon">🪧</span>
+          <span>交通标识牌</span>
+        </button>
+
+        <button class="touch-btn touch-btn-post" onclick="quickCollect('HUNDRED_METER_POST', '百米桩')">
+          <span class="icon">🚩</span>
+          <span>百米桩</span>
+        </button>
+
+        <button class="touch-btn touch-btn-rail" onclick="quickCollect('GUARDRAIL', '护栏设施')">
+          <span class="icon">🛡️</span>
+          <span>护栏设施</span>
+        </button>
+
+        <button class="touch-btn touch-btn-tree" onclick="quickCollect('TREE', '绿化林木')">
+          <span class="icon">🌲</span>
+          <span>绿化林木</span>
+        </button>
+
+        <button class="touch-btn touch-btn-light" onclick="quickCollect('STREET_LIGHT', '道路路灯')">
+          <span class="icon">💡</span>
+          <span>道路路灯</span>
+        </button>
+
+        <button class="touch-btn touch-btn-facility" onclick="quickCollect('TRAFFIC_FACILITY', '交通设施')">
+          <span class="icon">🚘</span>
+          <span>交通设施</span>
+        </button>
+
+        <button class="touch-btn touch-btn-anomaly" onclick="quickCollect('DISEASE', '路面异常/病害', true)">
+          <span class="icon">⚠️</span>
+          <span>异常/病害</span>
+        </button>
+
+        <button class="touch-btn touch-btn-other" onclick="quickCollect('OTHER', '其他附属设施')">
+          <span class="icon">📦</span>
+          <span>其他设施</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Right GIS & Offline Storage Tabs -->
+    <div class="gis-panel">
+      <div class="tab-bar">
+        <div id="tabGis" class="tab-item active" onclick="switchTab('gis')">
+          <span>🗺️</span> 实时 GIS 地图轨迹
+        </div>
+        <div id="tabAssets" class="tab-item" onclick="switchTab('assets')">
+          <span>📋</span> 本地采集路产 (<span id="tabAssetCount">0</span>)
+        </div>
+        <div id="tabQueue" class="tab-item" onclick="switchTab('queue')">
+          <span>📤</span> 5级离线同步队列 (<span id="tabQueueCount">0</span>)
+        </div>
+      </div>
+
+      <!-- Tab 1: GIS Map View (Canvas Engine) -->
+      <div id="contentGis" class="tab-content active">
+        <div class="map-box">
+          <canvas id="gisCanvas"></canvas>
+          <div class="map-overlay">
+            <div style="font-weight: 700; color: #38bdf8; margin-bottom: 2px;">📍 G105 国道实时巡查监控</div>
+            <div id="mapCoordinates" style="font-family: monospace; color: #94a3b8;">GPS: 113.2500, 23.1000 | 视频时间: 00:00</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Local Assets Records -->
+      <div id="contentAssets" class="tab-content">
+        <div class="record-list" id="assetListContainer">
+          <div style="text-align: center; color: var(--text-muted); padding: 40px;">暂无采集记录，开启巡查后点击左侧大按钮快速采集</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Offline Sync Queue -->
+      <div id="contentQueue" class="tab-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div>
+            <div style="font-weight: 700; font-size: 13px;">离线同步队列与断点续传</div>
+            <div style="font-size: 11px; color: var(--text-muted);">优先级：P1会话 > P2轨迹 > P3路产与视频事件 > P4照片 > P5视频切片</div>
+          </div>
+          <button id="btnManualSync" class="btn-main" style="background: #0284c7; color: white; padding: 6px 14px; font-size: 12px; border-radius: 8px; flex: none;" onclick="triggerManualSync()">
+            ☁️ 立即同步队列
+          </button>
+        </div>
+
+        <div class="sync-progress-bar">
+          <div id="syncProgressFill" class="sync-progress-fill"></div>
+        </div>
+
+        <div class="record-list" id="queueListContainer">
+          <div style="text-align: center; color: var(--text-muted); padding: 40px;">队列为空，所有数据均已同步</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Box -->
+  <div id="toast"></div>
+
+  <script>
+    /**
+     * 道路路产智能巡查与 GIS 原型系统
+     * 零依赖单文件运行，完整支持 IndexedDB 异步存储、5级优先级同步队列、视频事件秒级绑定
+     */
+
+    // --- State Variables ---
+    let isOnline = true;
+    let isPatrolling = false;
+    let isPaused = false;
+    let currentSession = null;
+    let patrolSeconds = 0;
+    let patrolTimer = null;
+    let simulationTimer = null;
+
+    // 巡检车辆仿真轨迹 (G105 国道)
+    const waypoints = [
+      [113.250000, 23.100000],
+      [113.265000, 23.125000],
+      [113.280000, 23.150000],
+      [113.295000, 23.180000],
+      [113.310000, 23.210000],
+      [113.330000, 23.245000],
+      [113.355000, 23.280000],
+      [113.380000, 23.320000],
+    ];
+    let simIndex = 0;
+    let simProgress = 0.0;
+    let currentCarPoint = { lng: waypoints[0][0], lat: waypoints[0][1], speed: 0, heading: 45 };
+
+    // 内存数据缓存 (结合真实 IndexedDB)
+    let dbInstance = null;
+    let localAssets = [];
+    let localTracks = [];
+    let localQueue = [];
+    let localVideoEvents = [];
+
+    // --- IndexedDB 初始化 ---
+    function initIndexedDB() {
+      return new Promise((resolve) => {
+        if (!window.indexedDB) {
+          console.warn('IndexedDB not supported, falling back to memory state');
+          resolve(null);
+          return;
+        }
+        const req = indexedDB.open('RoadGisPrototypeDB', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('assets')) db.createObjectStore('assets', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('tracks')) db.createObjectStore('tracks', { keyPath: 'id', autoIncrement: true });
+          if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('video_events')) db.createObjectStore('video_events', { keyPath: 'id' });
+        };
+        req.onsuccess = (e) => {
+          dbInstance = e.target.result;
+          loadExistingData().then(resolve);
+        };
+        req.onerror = () => resolve(null);
+      });
+    }
+
+    async function loadExistingData() {
+      if (!dbInstance) return;
+      localAssets = await readStore('assets');
+      localQueue = await readStore('queue');
+      localVideoEvents = await readStore('video_events');
+      updateUI();
+    }
+
+    function readStore(storeName) {
+      return new Promise((resolve) => {
+        if (!dbInstance) return resolve([]);
+        const tx = dbInstance.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+    }
+
+    function writeStore(storeName, item) {
+      return new Promise((resolve) => {
+        if (!dbInstance) return resolve();
+        const tx = dbInstance.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        store.put(item);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    }
+
+    // --- 在线/离线网络切换 ---
+    function toggleOnline() {
+      isOnline = !isOnline;
+      const netBadge = document.getElementById('netBadge');
+      const netDot = document.getElementById('netDot');
+      const netText = document.getElementById('netText');
+
+      if (isOnline) {
+        netBadge.className = 'badge badge-online';
+        netDot.innerText = '🟢';
+        netText.innerText = '仿真模式: 在线';
+        showToast('网络已恢复在线！自动开始触发同步队列');
+        triggerManualSync();
+      } else {
+        netBadge.className = 'badge badge-offline';
+        netDot.innerText = '🔴';
+        netText.innerText = '仿真模式: 离线断网';
+        showToast('当前处于离线断网状态，所有采集保存在本地 IndexedDB');
+      }
+    }
+
+    // --- 巡查会话控制 ---
+    function startPatrol() {
+      const sessionId = 'PAT-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+      currentSession = {
+        id: sessionId,
+        status: 'RUNNING',
+        startTime: new Date().toISOString(),
+      };
+
+      isPatrolling = true;
+      isPaused = false;
+      patrolSeconds = 0;
+
+      // 压入 P1 会话同步任务
+      pushQueueItem({
+        id: crypto.randomUUID(),
+        type: 'PATROL_SESSION',
+        priority: 1,
+        title: '巡查会话建档 (' + sessionId + ')',
+        status: 'PENDING',
+        sizeBytes: 1024,
+      });
+
+      // 启动定时器与车辆运动
+      patrolTimer = setInterval(() => {
+        if (!isPaused) {
+          patrolSeconds++;
+          const mins = Math.floor(patrolSeconds / 60).toString().padStart(2, '0');
+          const secs = (patrolSeconds % 60).toString().padStart(2, '0');
+          document.getElementById('recText').innerText = 'REC ' + mins + ':' + secs;
+          document.getElementById('mapCoordinates').innerText =
+            'GPS: ' + currentCarPoint.lng.toFixed(4) + ', ' + currentCarPoint.lat.toFixed(4) +
+            ' | 视频时间: ' + mins + ':' + secs;
+        }
+      }, 1000);
+
+      simulationTimer = setInterval(stepSimulation, 500);
+
+      document.getElementById('btnStart').style.display = 'none';
+      document.getElementById('btnPause').style.display = 'inline-flex';
+      document.getElementById('btnStop').style.display = 'inline-flex';
+      document.getElementById('patrolStateTag').innerText = '[巡查进行中]';
+      document.getElementById('patrolStateTag').style.color = '#34d399';
+
+      showToast('巡查启动成功！GPS 与录像切片已开始录制');
+    }
+
+    function pausePatrol() {
+      isPaused = !isPaused;
+      const btn = document.getElementById('btnPause');
+      if (isPaused) {
+        btn.innerHTML = '<span>▶</span> 恢复巡查';
+        document.getElementById('patrolStateTag').innerText = '[巡查暂停中]';
+        document.getElementById('patrolStateTag').style.color = '#fbbf24';
+        showToast('巡查已暂停');
+      } else {
+        btn.innerHTML = '<span>⏸</span> 暂停巡查';
+        document.getElementById('patrolStateTag').innerText = '[巡查进行中]';
+        document.getElementById('patrolStateTag').style.color = '#34d399';
+        showToast('巡查已恢复');
+      }
+    }
+
+    function stopPatrol() {
+      isPatrolling = false;
+      isPaused = false;
+      clearInterval(patrolTimer);
+      clearInterval(simulationTimer);
+
+      // 压入 P2 全量轨迹打包任务
+      pushQueueItem({
+        id: crypto.randomUUID(),
+        type: 'GPS_TRACK',
+        priority: 2,
+        title: '巡查全程轨迹打包 (' + localTracks.length + ' 个坐标点)',
+        status: 'PENDING',
+        sizeBytes: localTracks.length * 128,
+      });
+
+      // 压入 P5 视频切片上传任务
+      pushQueueItem({
+        id: crypto.randomUUID(),
+        type: 'VIDEO',
+        priority: 5,
+        title: '视频切片分块上传 (VIDEO_001.mp4 - 50MB)',
+        status: 'PENDING',
+        sizeBytes: 50 * 1024 * 1024,
+      });
+
+      document.getElementById('btnStart').style.display = 'inline-flex';
+      document.getElementById('btnPause').style.display = 'none';
+      document.getElementById('btnStop').style.display = 'none';
+      document.getElementById('patrolStateTag').innerText = '[巡查已结束]';
+      document.getElementById('patrolStateTag').style.color = '#94a3b8';
+
+      showToast('巡查已结束！轨迹与视频切片已压入离线队列');
+      if (isOnline) triggerManualSync();
+    }
+
+    // --- 车辆仿真运动逻辑 ---
+    function stepSimulation() {
+      if (!isPatrolling || isPaused) return;
+
+      if (simIndex >= waypoints.length - 1) {
+        simIndex = 0;
+        simProgress = 0.0;
+      }
+
+      const p1 = waypoints[simIndex];
+      const p2 = waypoints[simIndex + 1];
+
+      simProgress += 0.02;
+      if (simProgress >= 1.0) {
+        simIndex++;
+        simProgress = 0.0;
+      }
+
+      currentCarPoint.lng = p1[0] + (p2[0] - p1[0]) * simProgress;
+      currentCarPoint.lat = p1[1] + (p2[1] - p1[1]) * simProgress;
+      currentCarPoint.speed = Math.round(55 + Math.random() * 8);
+
+      document.getElementById('dispSpeed').innerText = currentCarPoint.speed.toFixed(1);
+
+      // 计算标称桩号 (仿真 K127+000 递增)
+      const meterOffset = Math.round((simIndex + simProgress) * 450);
+      const km = 127 + Math.floor(meterOffset / 1000);
+      const m = (meterOffset % 1000).toString().padStart(3, '0');
+      document.getElementById('dispMilepost').innerText = 'K' + km + '+' + m;
+
+      // 记录轨迹点
+      localTracks.push({
+        id: localTracks.length + 1,
+        lng: currentCarPoint.lng,
+        lat: currentCarPoint.lat,
+        speed: currentCarPoint.speed,
+        time: new Date().toISOString(),
+      });
+
+      renderGisMap();
+    }
+
+    // --- 一键秒级快速打点采集 ---
+    async function quickCollect(typeId, typeName, isAnomaly = false) {
+      if (!isPatrolling) {
+        showToast('⚠️ 巡查尚未开始，请先点击【开始巡查】');
+        return;
+      }
+
+      const assetId = crypto.randomUUID();
+      const mins = Math.floor(patrolSeconds / 60).toString().padStart(2, '0');
+      const secs = (patrolSeconds % 60).toString().padStart(2, '0');
+      const videoTimeStr = mins + ':' + secs;
+      const milepost = document.getElementById('dispMilepost').innerText;
+
+      const asset = {
+        id: assetId,
+        code: 'ASSET-G105-' + milepost.replace('+', '_') + '-' + Math.floor(100 + Math.random() * 900),
+        typeId,
+        typeName,
+        isAnomaly,
+        milepost,
+        lng: currentCarPoint.lng,
+        lat: currentCarPoint.lat,
+        videoSlice: 'VIDEO_001.mp4',
+        videoOffsetSecs: patrolSeconds,
+        videoTimeStr,
+        syncStatus: 'PENDING',
+        createdAt: new Date().toISOString(),
+      };
+
+      // 1. 本地保存路产记录
+      localAssets.unshift(asset);
+      await writeStore('assets', asset);
+
+      // 2. 关联视频证据事件 (VideoEvent)
+      const videoEvent = {
+        id: crypto.randomUUID(),
+        assetId,
+        videoId: 'VID-PAT20260907-001',
+        offsetSecs: patrolSeconds,
+        videoTimeStr,
+        type: isAnomaly ? 'ANOMALY_FLAGGED' : 'ASSET_DETECTED',
+        createdAt: new Date().toISOString(),
+      };
+      localVideoEvents.push(videoEvent);
+      await writeStore('video_events', videoEvent);
+
+      // 3. 压入 P3 级同步任务队列
+      pushQueueItem({
+        id: crypto.randomUUID(),
+        type: 'ASSET',
+        priority: 3,
+        title: (isAnomaly ? '【异常】' : '【路产】') + typeName + ' - ' + milepost,
+        status: 'PENDING',
+        sizeBytes: 2048,
+      });
+
+      updateUI();
+      renderGisMap();
+
+      showToast('已采集: ' + typeName + ' (' + milepost + ') [视频帧 ' + videoTimeStr + ']');
+      if (isOnline) triggerManualSync();
+    }
+
+    // --- 队列管理与同步模拟 ---
+    function pushQueueItem(item) {
+      localQueue.unshift(item);
+      writeStore('queue', item);
+      updateUI();
+    }
+
+    let isSyncing = false;
+    async function triggerManualSync() {
+      if (!isOnline) {
+        showToast('⚠️ 当前处于离线断网状态，无法连接服务端！');
+        return;
+      }
+      if (isSyncing) return;
+      isSyncing = true;
+
+      const pendingItems = localQueue.filter(q => q.status === 'PENDING');
+      if (pendingItems.length === 0) {
+        isSyncing = false;
+        showToast('离线队列均已处于最新同步状态');
+        return;
+      }
+
+      // 按优先级从小到大排序 (P1 -> P5)
+      pendingItems.sort((a, b) => a.priority - b.priority);
+
+      const fill = document.getElementById('syncProgressFill');
+      fill.style.width = '10%';
+
+      for (let i = 0; i < pendingItems.length; i++) {
+        const item = pendingItems[i];
+        item.status = 'UPLOADING';
+        updateUI();
+
+        // 模拟网络上传延迟
+        await new Promise(r => setTimeout(r, 400));
+        item.status = 'UPLOADED';
+        writeStore('queue', item);
+
+        fill.style.width = Math.round(((i + 1) / pendingItems.length) * 100) + '%';
+        updateUI();
+      }
+
+      // 将本地路产状态同步为 UPLOADED
+      for (const a of localAssets) {
+        if (a.syncStatus === 'PENDING') {
+          a.syncStatus = 'UPLOADED';
+          writeStore('assets', a);
+        }
+      }
+
+      isSyncing = false;
+      setTimeout(() => { fill.style.width = '0%'; }, 800);
+      showToast('🎉 同步完成！所有离线数据已安全入库服务端');
+    }
+
+    // --- UI 界面更新 ---
+    function updateUI() {
+      document.getElementById('dispAssetCount').innerText = localAssets.length;
+      document.getElementById('tabAssetCount').innerText = localAssets.length;
+
+      const pendingCount = localQueue.filter(q => q.status === 'PENDING').length;
+      document.getElementById('queueText').innerText = '待同步: ' + pendingCount + ' 项';
+      document.getElementById('tabQueueCount').innerText = pendingCount;
+
+      // 渲染路产列表
+      const assetContainer = document.getElementById('assetListContainer');
+      if (localAssets.length === 0) {
+        assetContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">暂无采集记录，开启巡查后点击左侧大按钮快速采集</div>';
+      } else {
+        assetContainer.innerHTML = localAssets.map(a => `
+          <div class="record-card">
+            <div>
+              <div style="font-weight: 700; font-size: 13px; color: ${a.isAnomaly ? '#f87171' : '#f8fafc'};">
+                ${a.isAnomaly ? '⚠️ ' : ''}${a.typeName}
+                <span style="font-family: monospace; color: #38bdf8; margin-left: 6px;">${a.milepost}</span>
+              </div>
+              <div class="record-meta">
+                编号: ${a.code} | 视频证据帧: <span style="color: #fbbf24;">${a.videoTimeStr}</span> (第 ${a.videoOffsetSecs} 秒)
+              </div>
+            </div>
+            <div>
+              <span class="badge ${a.syncStatus === 'UPLOADED' ? 'badge-online' : 'badge-queue'}">
+                ${a.syncStatus === 'UPLOADED' ? '✓ 已同步' : '⏳ 本地待传'}
+              </span>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 渲染离线队列列表
+      const queueContainer = document.getElementById('queueListContainer');
+      if (localQueue.length === 0) {
+        queueContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 40px;">队列为空，所有数据均已同步</div>';
+      } else {
+        queueContainer.innerHTML = localQueue.map(q => {
+          let priColor = '#a855f7';
+          if (q.priority === 2) priColor = '#10b981';
+          if (q.priority === 3) priColor = '#06b6d4';
+          if (q.priority === 4) priColor = '#f59e0b';
+          if (q.priority === 5) priColor = '#3b82f6';
+          return `
+            <div class="record-card">
+              <div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="background: rgba(255,255,255,0.08); border: 1px solid ${priColor}; color: ${priColor}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700;">
+                    P${q.priority}
+                  </span>
+                  <span style="font-size: 13px; font-weight: 600;">${q.title}</span>
+                </div>
+                <div class="record-meta">ID: ${q.id.slice(0, 16)}... | 载荷: ${(q.sizeBytes / 1024).toFixed(1)} KB</div>
+              </div>
+              <div>
+                <span class="badge ${q.status === 'UPLOADED' ? 'badge-online' : (q.status === 'UPLOADING' ? 'badge-gnss' : 'badge-queue')}">
+                  ${q.status === 'UPLOADED' ? '✓ 已上传' : (q.status === 'UPLOADING' ? '⚡ 上传中...' : '待传')}
+                </span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // --- Tab 切换 ---
+    function switchTab(name) {
+      document.getElementById('tabGis').classList.toggle('active', name === 'gis');
+      document.getElementById('tabAssets').classList.toggle('active', name === 'assets');
+      document.getElementById('tabQueue').classList.toggle('active', name === 'queue');
+
+      document.getElementById('contentGis').classList.toggle('active', name === 'gis');
+      document.getElementById('contentAssets').classList.toggle('active', name === 'assets');
+      document.getElementById('contentQueue').classList.toggle('active', name === 'queue');
+
+      if (name === 'gis') {
+        setTimeout(renderGisMap, 50);
+      }
+    }
+
+    // --- Canvas GIS 地图动态渲染 ---
+    const canvas = document.getElementById('gisCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      if (canvas.parentElement) {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+        renderGisMap();
+      }
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function renderGisMap() {
+      if (!canvas.width || !canvas.height) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 地图深色网格背景
+      ctx.strokeStyle = '#161f36';
+      ctx.lineWidth = 1;
+      const gridSize = 40;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      // 坐标映射范围 (G105 坐标点投射到 Canvas)
+      const minLng = 113.24, maxLng = 113.39;
+      const minLat = 23.09, maxLat = 23.33;
+
+      function toX(lng) {
+        return 40 + ((lng - minLng) / (maxLng - minLng)) * (canvas.width - 80);
+      }
+      function toY(lat) {
+        return (canvas.height - 40) - ((lat - minLat) / (maxLat - minLat)) * (canvas.height - 80);
+      }
+
+      // 1. 绘制 G105 国道主中心线
+      ctx.beginPath();
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 10;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      waypoints.forEach((pt, i) => {
+        const x = toX(pt[0]), y = toY(pt[1]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      waypoints.forEach((pt, i) => {
+        const x = toX(pt[0]), y = toY(pt[1]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 2. 绘制巡查车辆实际轨迹 (青色高亮)
+      if (localTracks.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 4;
+        localTracks.forEach((pt, i) => {
+          const x = toX(pt.lng), y = toY(pt.lat);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
+
+      // 3. 绘制路产标记点
+      localAssets.forEach((a) => {
+        const ax = toX(a.lng), ay = toY(a.lat);
+        ctx.beginPath();
+        ctx.arc(ax, ay, a.isAnomaly ? 7 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = a.isAnomaly ? '#ef4444' : '#10b981';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        ctx.font = '10px monospace';
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillText(a.typeName, ax + 8, ay + 3);
+      });
+
+      // 4. 绘制当前车载巡查光标 (动态光圈)
+      const carX = toX(currentCarPoint.lng);
+      const carY = toY(currentCarPoint.lat);
+
+      ctx.beginPath();
+      ctx.arc(carX, carY, 14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(6, 182, 212, 0.25)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(carX, carY, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    }
+
+    // --- Toast 弹窗 ---
+    let toastTimeout = null;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2600);
+    }
+
+    // --- 启动自检 ---
+    window.addEventListener('DOMContentLoaded', async () => {
+      await initIndexedDB();
+      resizeCanvas();
+    });
+  </script>
+</body>
+</html>

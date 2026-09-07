@@ -1,25 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { PatrolSession, GPSTrackPoint, Asset, calculatePointMilepost } from '@road-gis/shared';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  PatrolSession,
+  PatrolStatus,
+  GPSTrackPoint,
+  Asset,
+  AssetHistoryRecord,
+  calculatePointMilepost
+} from '@road-gis/shared';
 import { PatrolDashboard } from './components/PatrolDashboard.js';
 import { SyncQueueModal } from './components/SyncQueueModal.js';
 import { PendingAssetsModal } from './components/PendingAssetsModal.js';
-import { gpsTracker } from './services/gps.js';
+import { gpsTracker, GPSSignalStatus } from './services/gps.js';
 import { videoRecorder } from './services/camera.js';
 import { syncManager } from './services/sync.js';
 import { offlineDb } from './services/db.js';
 
 export const App: React.FC = () => {
-  const [isPatrolling, setIsPatrolling] = useState(false);
+  const [patrolStatus, setPatrolStatus] = useState<PatrolStatus>('CREATED');
   const [currentSession, setCurrentSession] = useState<PatrolSession | null>(null);
   const [gpsPoint, setGpsPoint] = useState<GPSTrackPoint | null>(null);
+  const [gpsSignal, setGpsSignal] = useState<GPSSignalStatus>('EXCELLENT');
   const [videoDuration, setVideoDuration] = useState(0);
   const [sliceFileName, setSliceFileName] = useState('VIDEO_001.mp4');
 
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
+  const [syncState, setSyncState] = useState<{
+    isSyncing: boolean;
+    syncedCount: number;
+    totalCount: number;
+    message: string;
+  }>({
+    isSyncing: false,
+    syncedCount: 0,
+    totalCount: 0,
+    message: '就绪',
+  });
 
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
+
+  const durationTimerRef = useRef<any>(null);
 
   // G105 国道仿真线段顶点
   const g105Coords: [number, number][] = [
@@ -33,19 +54,34 @@ export const App: React.FC = () => {
     [113.380000, 23.320000],
   ];
 
-  const updatePendingCount = () => {
-    setPendingCount(offlineDb.getPendingTasks().length);
+  const updatePendingCount = async () => {
+    try {
+      const pending = await offlineDb.getPendingTasks();
+      setPendingCount(pending.length);
+    } catch {
+      setPendingCount(0);
+    }
   };
 
   useEffect(() => {
     updatePendingCount();
-    syncManager.onProgress(() => {
-      updatePendingCount();
+    syncManager.onProgress((status) => {
+      setSyncState({
+        isSyncing: status.isSyncing,
+        syncedCount: status.syncedCount,
+        totalCount: status.totalCount,
+        message: status.message,
+      });
+      setPendingCount(status.pendingCount);
     });
+
+    return () => {
+      if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    };
   }, []);
 
   // 1. 开始巡查
-  const handleStartPatrol = () => {
+  const handleStartPatrol = async () => {
     const sessionId = `PAT-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const session: PatrolSession = {
@@ -55,7 +91,7 @@ export const App: React.FC = () => {
       vehicle_plate: '粤A12345',
       road_id: 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
       road_code: 'G105',
-      status: 'IN_PROGRESS',
+      status: 'RUNNING',
       start_time: new Date().toISOString(),
       duration_seconds: 0,
       distance_km: 0,
@@ -68,11 +104,12 @@ export const App: React.FC = () => {
     };
 
     setCurrentSession(session);
-    setIsPatrolling(true);
+    setPatrolStatus('RUNNING');
+    setVideoDuration(0);
 
-    // 保存离线数据库并加入 P1 队列
-    offlineDb.saveSession(session);
-    offlineDb.saveTask({
+    // 存入离线 IndexedDB 并加入 P1 同步队列
+    await offlineDb.saveSession(session);
+    await offlineDb.saveTask({
       id: crypto.randomUUID(),
       session_id: sessionId,
       task_type: 'SESSION',
@@ -84,38 +121,109 @@ export const App: React.FC = () => {
       retry_count: 0,
     });
 
-    // 启动高精度持续 GPS 采集
-    gpsTracker.start(sessionId, (pt) => {
+    // 启动 GPS 采集
+    await gpsTracker.start(sessionId, (pt, signal) => {
       setGpsPoint(pt);
-      // 每采集一定点数自动生成 P2 轨迹上传任务
+      setGpsSignal(signal);
       updatePendingCount();
     });
 
-    // 启动切片录像
+    // 启动录像
     videoRecorder.startRecording(sessionId);
     const slice = videoRecorder.getCurrentSlice();
     if (slice) setSliceFileName(slice.file_name);
 
-    updatePendingCount();
+    // 启动录像计时器
+    if (durationTimerRef.current) clearInterval(durationTimerRef.current);
+    durationTimerRef.current = setInterval(() => {
+      setVideoDuration(videoRecorder.getCurrentOffsetSeconds());
+      const cur = videoRecorder.getCurrentSlice();
+      if (cur) setSliceFileName(cur.file_name);
+    }, 1000);
+
+    await updatePendingCount();
     if (isOnline) {
       syncManager.triggerSync();
     }
   };
 
-  // 2. 驾驶友好一键秒级快速打点采集
-  const handleQuickCollect = (typeId: string, typeName: string, isAnomaly: boolean = false) => {
+  // 2. 暂停巡查
+  const handlePausePatrol = async () => {
+    if (!currentSession) return;
+    gpsTracker.pause();
+    videoRecorder.pauseRecording();
+    setPatrolStatus('PAUSED');
+
+    currentSession.status = 'PAUSED';
+    await offlineDb.saveSession(currentSession);
+  };
+
+  // 3. 恢复巡查
+  const handleResumePatrol = async () => {
+    if (!currentSession) return;
+    gpsTracker.resume();
+    videoRecorder.resumeRecording();
+    setPatrolStatus('RUNNING');
+
+    currentSession.status = 'RUNNING';
+    await offlineDb.saveSession(currentSession);
+  };
+
+  // 4. 停止巡查
+  const handleStopPatrol = async () => {
+    if (!currentSession) return;
+
+    if (durationTimerRef.current) {
+      clearInterval(durationTimerRef.current);
+      durationTimerRef.current = null;
+    }
+
+    gpsTracker.stop();
+    videoRecorder.stopRecording();
+
+    currentSession.status = 'COMPLETED';
+    currentSession.end_time = new Date().toISOString();
+    await offlineDb.saveSession(currentSession);
+
+    // 创建 P2 轨迹全量打包任务
+    await offlineDb.saveTask({
+      id: crypto.randomUUID(),
+      session_id: currentSession.id,
+      task_type: 'TRACK',
+      priority: 2,
+      resource_id: currentSession.id,
+      total_bytes: 10240,
+      uploaded_bytes: 0,
+      status: 'PENDING',
+      retry_count: 0,
+    });
+
+    setPatrolStatus('COMPLETED');
+    await updatePendingCount();
+
+    if (isOnline) {
+      syncManager.triggerSync();
+    }
+  };
+
+  // 5. 8大车载物理/大触控按键一键极速秒级采集
+  const handleQuickCollect = async (typeId: string, typeName: string, isAnomaly: boolean = false) => {
     if (!currentSession) return;
 
     const pt = gpsTracker.getCurrentPoint() || {
+      session_id: currentSession.id,
+      point_time: new Date().toISOString(),
       latitude: 23.150000,
       longitude: 113.280000,
       speed_kmh: 60,
       heading: 45,
       altitude: 20,
       accuracy: 4,
+      provider: 'gnss_rtk',
+      is_valid: true,
     };
 
-    // 本地即刻根据中心线折线推算标称桩号
+    // 本地即刻根据道路折线计算标称桩号
     const projection = calculatePointMilepost([pt.longitude, pt.latitude], g105Coords, 120000);
 
     const currSlice = videoRecorder.getCurrentSlice();
@@ -148,11 +256,37 @@ export const App: React.FC = () => {
       updated_at: nowIso,
     };
 
-    // 写入离线数据库
-    offlineDb.saveAsset(asset);
+    // 1. 保存路产主记录到 IndexedDB
+    await offlineDb.saveAsset(asset);
 
-    // 加入 P3 路产优先级队列
-    offlineDb.saveTask({
+    // 2. 生成绑定的视频证据事件 (VideoEvent)
+    const videoEvent = videoRecorder.recordVideoEvent(
+      assetId,
+      isAnomaly ? 'ANOMALY_FLAGGED' : 'ASSET_DETECTED',
+      `巡检快速打点：${typeName} (${projection.milepostStr})`
+    );
+
+    // 3. 记录不可覆盖的历史记录变更 (AssetHistory)
+    const historyRec: AssetHistoryRecord = {
+      id: crypto.randomUUID(),
+      asset_id: assetId,
+      session_id: currentSession.id,
+      action: isAnomaly ? 'ANOMALY_REPORTED' : 'FIRST_DISCOVERY',
+      operator_id: currentSession.user_id,
+      operator_name: currentSession.user_name,
+      previous_status: undefined,
+      new_status: asset.status,
+      latitude: pt.latitude,
+      longitude: pt.longitude,
+      milepost: projection.milepostStr,
+      video_event_id: videoEvent?.id,
+      notes: `车载一键发现路产，标称桩号: ${projection.milepostStr}`,
+      timestamp: nowIso,
+    };
+    await offlineDb.addAssetHistory(historyRec);
+
+    // 4. 加入 P3 路产优先级同步队列
+    await offlineDb.saveTask({
       id: crypto.randomUUID(),
       session_id: currentSession.id,
       task_type: 'ASSET',
@@ -164,41 +298,24 @@ export const App: React.FC = () => {
       retry_count: 0,
     });
 
-    updatePendingCount();
-
-    // 若在线立即静默上传
-    if (isOnline) {
-      syncManager.triggerSync();
+    // 5. 若成功生成视频证据事件，加入 P3 同步队列
+    if (videoEvent) {
+      await offlineDb.saveTask({
+        id: crypto.randomUUID(),
+        session_id: currentSession.id,
+        task_type: 'VIDEO_EVENT',
+        priority: 3,
+        resource_id: videoEvent.id,
+        total_bytes: 1024,
+        uploaded_bytes: 0,
+        status: 'PENDING',
+        retry_count: 0,
+      });
     }
-  };
 
-  // 3. 结束巡查
-  const handleStopPatrol = () => {
-    if (!currentSession) return;
+    await updatePendingCount();
 
-    gpsTracker.stop();
-    videoRecorder.stopRecording();
-
-    currentSession.status = 'COMPLETED';
-    currentSession.end_time = new Date().toISOString();
-    offlineDb.saveSession(currentSession);
-
-    // 创建 P2 轨迹全量打包任务
-    offlineDb.saveTask({
-      id: crypto.randomUUID(),
-      session_id: currentSession.id,
-      task_type: 'TRACK',
-      priority: 2,
-      resource_id: currentSession.id,
-      total_bytes: 10240,
-      uploaded_bytes: 0,
-      status: 'PENDING',
-      retry_count: 0,
-    });
-
-    setIsPatrolling(false);
-    updatePendingCount();
-
+    // 6. 若在线则立即触发静默同步
     if (isOnline) {
       syncManager.triggerSync();
     }
@@ -207,14 +324,18 @@ export const App: React.FC = () => {
   return (
     <div className="w-screen h-screen overflow-hidden bg-black font-sans select-none">
       <PatrolDashboard
-        isPatrolling={isPatrolling}
+        patrolStatus={patrolStatus}
         onStartPatrol={handleStartPatrol}
+        onPausePatrol={handlePausePatrol}
+        onResumePatrol={handleResumePatrol}
         onStopPatrol={handleStopPatrol}
         onQuickCollect={handleQuickCollect}
         gpsPoint={gpsPoint}
+        gpsSignal={gpsSignal}
         videoDurationSecs={videoDuration}
         sliceFileName={sliceFileName}
         isOnline={isOnline}
+        syncState={syncState}
         pendingCount={pendingCount}
         onOpenSync={() => setShowSyncModal(true)}
         onOpenPending={() => setShowPendingModal(true)}

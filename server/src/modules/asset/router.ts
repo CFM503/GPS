@@ -101,4 +101,27 @@ router.get('/:id', (req, res) => {
   });
 });
 
+// GET /api/v1/assets/:id/history (查询路产变更历史记录)
+router.get('/:id/history', (req, res) => {
+  const history = dbStore.getAssetHistory(req.params.id);
+  res.json({
+    code: 200,
+    message: 'success',
+    data: history,
+  });
+});
+
+// POST /api/v1/assets/:id/history (追加路产历史变更记录)
+router.post('/:id/history', auditMiddleware('ASSET', 'ADD_HISTORY'), (req, res) => {
+  const record = dbStore.addAssetHistory({
+    ...req.body,
+    asset_id: req.params.id,
+  });
+  res.status(201).json({
+    code: 201,
+    message: '路产变更历史记录登记成功',
+    data: record,
+  });
+});
+
 export default router;

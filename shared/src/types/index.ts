@@ -4,7 +4,9 @@ import {
   PatrolStatus,
   SyncStatus,
   UploadPriority,
-  UserRole
+  UserRole,
+  VideoEventType,
+  AssetActionType
 } from '../constants/index.js';
 
 export interface GeoPoint {
@@ -189,7 +191,7 @@ export interface MaintenanceRecord {
 export interface UploadTask {
   id: string;
   session_id: string;
-  task_type: 'SESSION' | 'TRACK' | 'ASSET' | 'PHOTO' | 'VIDEO';
+  task_type: 'SESSION' | 'TRACK' | 'ASSET' | 'PHOTO' | 'VIDEO' | 'VIDEO_EVENT';
   priority: UploadPriority;
   resource_id: string;
   file_path?: string;
@@ -199,3 +201,50 @@ export interface UploadTask {
   retry_count: number;
   last_error?: string;
 }
+
+export interface VideoEvent {
+  id: string;                      // 客户端唯一 UUID
+  session_id: string;              // 所属巡查会话编号
+  video_id: string;                // 关联切片视频 ID (如 VID-PAT...-001)
+  asset_id: string;                // 关联路产 ID
+  event_type: VideoEventType;      // ASSET_DETECTED, ANOMALY_FLAGGED, MANUAL_BOOKMARK
+  timestamp: string;               // 绝对发现时间戳 (ISO 8601)
+  video_offset_seconds: number;    // 相对该切片起始时间的精确定位偏移秒数
+  description?: string;
+  created_at: string;
+}
+
+export interface AssetHistoryRecord {
+  id: string;                      // 历史记录唯一 UUID
+  asset_id: string;                // 关联路产 ID
+  session_id?: string;             // 关联巡查会话
+  action: AssetActionType;         // FIRST_DISCOVERY, ANOMALY_REPORTED, MAINTENANCE_ASSIGNED...
+  operator_id?: string;
+  operator_name: string;
+  previous_status?: AssetStatus;
+  new_status: AssetStatus;
+  latitude: number;
+  longitude: number;
+  milepost: string;
+  photo_urls?: string[];
+  video_event_id?: string;
+  notes?: string;
+  timestamp: string;               // 发生时间 (ISO 8601)
+}
+
+export interface SyncQueueItem {
+  id: string;                      // 任务唯一 UUID
+  session_id: string;
+  item_type: 'PATROL_SESSION' | 'GPS_TRACK' | 'ASSET' | 'PHOTO' | 'VIDEO' | 'VIDEO_EVENT';
+  priority: UploadPriority;        // 1(最高) -> 5(最低)
+  resource_id: string;             // 客户端业务实体主键
+  payload?: any;                   // 本地离线快照载荷 (确保网络断开再恢复时可全量恢复)
+  status: SyncStatus;              // PENDING, UPLOADING, UPLOADED, FAILED
+  retry_count: number;
+  max_retries: number;
+  last_error?: string;
+  idempotency_key: string;         // 幂等键，杜绝网络重传产生重复记录
+  created_at: string;
+  updated_at: string;
+}
+

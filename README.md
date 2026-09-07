@@ -36,10 +36,16 @@ GIS/
 │   │   └── src/components/   # GIS主地图、图层管理器、轨迹回放时间轴、视频时间跳转播放器
 │   │
 │   └── mobile/               # 车载移动巡查端 (@road-gis/mobile)
-│       ├── src/services/     # 持续高频 GPS 采集器、5分钟视频自动切片、本地离线数据库 (Offline-First)
-│       └── src/components/   # 驾驶安全 6 大色块触控键、5级优先级同步队列与断点续传面板
+│       ├── src/services/     # IndexedDB生产级离线存储引擎 (idbStorage)、Screen WakeLock、视频切片
+│       └── src/components/   # 驾驶安全 8 大触控色块按键、5级优先级同步队列、停车安全文字补录
+│
+├── prototype/                # 零依赖单文件原型 (双击即用)
+│   └── index.html            # 高拟真车载巡查、8按键采集、IndexedDB离线模拟、Canvas GIS轨迹
 │
 └── docs/                     # 架构与运维技术文档
+    ├── OFFLINE_FIRST.md      # 离线优先架构设计与 IndexedDB 规范
+    ├── MOBILE_ARCHITECTURE.md# 车载移动巡查端 8 大按键与安全规范
+    ├── SYNC_DESIGN.md        # 5 级优先级同步队列与客户端 UUID 幂等性设计
     ├── API.md                # RESTful API 接口规范
     ├── DATABASE.md           # 空间数据库设计说明书
     └── DEPLOY.md             # 生产部署与 Android APK 打包指南
@@ -164,7 +170,7 @@ npx cap open android
 
 ## 自动化测试与验证套件
 
-本项目配备完备的算法单元测试与端到端集成测试：
+本项目配备完备的算法单元测试、离线同步套件与端到端集成测试（共 19 项全部通过）：
 
 ```bash
 # 1. 运行核心共享库单元测试 (坐标系互转、桩号折线投影、Haversine算法)
@@ -172,15 +178,23 @@ node --test shared/tests/shared.test.ts
 
 # 2. 运行服务端全套集成 API 与断网续传测试
 node --test server/tests/api.test.ts
+
+# 3. 运行生产级离线优先与幂等性全链路测试套件 (6大核心场景)
+npx tsx --test server/tests/offline-sync.test.ts
+
+# 4. 一键运行全量自动化测试
+npx tsx --test shared/tests/shared.test.ts server/tests/api.test.ts server/tests/offline-sync.test.ts
 ```
 
 ### 核心测试覆盖：
 - [x] **WGS84 $\leftrightarrow$ GCJ-02 $\leftrightarrow$ BD-09** 高精度双向转换往返误差 $< 0.1$ 米测试；
 - [x] **道路中心线桩号投影**：输入 GPS 点自动拟合推算标称桩号（如 `K120+000`）；
 - [x] **巡查 Session 全生命周期**：创建会话 $\rightarrow$ 上传轨迹点 $\rightarrow$ 生成 PostGIS LineString $\rightarrow$ 结束会话；
-- [x] **路产空间 BBOX 检索**：点/线/面要素多维空间范围查询；
-- [x] **视频 50% 断网重传**：模拟传输至 50% 断网，恢复后服务端校验 `Upload-Offset` 从 50% 继续续传至 100%；
-- [x] **毫秒级视频时间对齐**：输入路产发现时刻，自动匹配切片及播放偏移秒数。
+- [x] **纯离线环境数据采集与本地保存**：断网状态下 GPS、5类路产、切片完整记录于本地队列；
+- [x] **移动端重启数据不丢失**：模拟应用销毁重启，IndexedDB 100% 完整恢复未同步项；
+- [x] **网络恢复 5 级优先级自动同步**：P1 会话 $\rightarrow$ P2 轨迹 $\rightarrow$ P3 路产与视频事件 $\rightarrow$ P4 照片 $\rightarrow$ P5 视频切片；
+- [x] **中断再续传与幂等性**：50% 视频断网不产生脏数据，恢复后继续上传；重试上传杜绝重复数据；
+- [x] **视频-路产联动与历史追溯**：通过路产 ID 关联视频切片与秒级帧偏移，不可覆盖变更记录保留。
 
 ---
 

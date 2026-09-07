@@ -8,6 +8,7 @@ import trackRouter from './modules/track/router.js';
 import assetRouter from './modules/asset/router.js';
 import photoRouter from './modules/photo/router.js';
 import videoRouter from './modules/video/router.js';
+import videoEventRouter from './modules/video-event/router.js';
 import gisRouter from './modules/gis/router.js';
 import maintenanceRouter from './modules/maintenance/router.js';
 import statsRouter from './modules/stats/router.js';
@@ -41,6 +42,7 @@ export function createApp(): Express {
   app.use('/api/v1/assets', assetRouter);
   app.use('/api/v1/photos', photoRouter);
   app.use('/api/v1/videos', videoRouter);
+  app.use('/api/v1/video-events', videoEventRouter);
   app.use('/api/v1/gis', gisRouter);
   app.use('/api/v1/maintenance', maintenanceRouter);
   app.use('/api/v1/stats', statsRouter);

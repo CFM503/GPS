@@ -4,119 +4,118 @@ import {
   Asset,
   AssetPhoto,
   VideoSlice,
+  VideoEvent,
+  AssetHistoryRecord,
+  SyncQueueItem,
   UploadTask,
   SyncStatus
 } from '@road-gis/shared';
+import { idbStorage } from './idbStorage.js';
 
-const STORAGE_KEYS = {
-  SESSIONS: 'gis_offline_sessions',
-  TRACKS: 'gis_offline_tracks',
-  ASSETS: 'gis_offline_assets',
-  PHOTOS: 'gis_offline_photos',
-  VIDEOS: 'gis_offline_videos',
-  TASKS: 'gis_offline_tasks',
-};
-
-function getItem<T>(key: string): T[] {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function setItem<T>(key: string, items: T[]): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(items));
-  } catch (err) {
-    console.error('LocalStorage write error', err);
-  }
-}
-
+/**
+ * 统一离线数据库接入层 (结合 IndexedDB 真实异步持久化与内存快速缓存)
+ */
 export const offlineDb = {
   // --- Sessions ---
   saveSession: (session: PatrolSession) => {
-    const list = getItem<PatrolSession>(STORAGE_KEYS.SESSIONS);
-    const idx = list.findIndex((s) => s.id === session.id);
-    if (idx >= 0) list[idx] = session;
-    else list.push(session);
-    setItem(STORAGE_KEYS.SESSIONS, list);
+    idbStorage.saveSession(session);
   },
-  getSessions: () => getItem<PatrolSession>(STORAGE_KEYS.SESSIONS),
+  getSession: (id: string) => idbStorage.getSession(id),
+  getSessions: async () => idbStorage.getAllSessions(),
 
   // --- Tracks ---
   saveTrackPoint: (point: GPSTrackPoint) => {
-    const list = getItem<GPSTrackPoint>(STORAGE_KEYS.TRACKS);
-    list.push(point);
-    setItem(STORAGE_KEYS.TRACKS, list);
+    idbStorage.saveTrackPoint(point);
   },
-  getPendingTracks: (sessionId: string) => {
-    return getItem<GPSTrackPoint>(STORAGE_KEYS.TRACKS).filter((t) => t.session_id === sessionId);
-  },
-  clearTracks: (sessionId: string) => {
-    const list = getItem<GPSTrackPoint>(STORAGE_KEYS.TRACKS).filter((t) => t.session_id !== sessionId);
-    setItem(STORAGE_KEYS.TRACKS, list);
+  getPendingTracks: async (sessionId: string) => {
+    return idbStorage.getSessionTracks(sessionId);
   },
 
   // --- Assets ---
   saveAsset: (asset: Asset) => {
-    const list = getItem<Asset>(STORAGE_KEYS.ASSETS);
-    const idx = list.findIndex((a) => a.id === asset.id);
-    if (idx >= 0) list[idx] = asset;
-    else list.push(asset);
-    setItem(STORAGE_KEYS.ASSETS, list);
+    idbStorage.saveAsset(asset);
   },
-  getAssets: () => getItem<Asset>(STORAGE_KEYS.ASSETS),
-  updateAssetSyncStatus: (id: string, status: SyncStatus) => {
-    const list = getItem<Asset>(STORAGE_KEYS.ASSETS);
-    const asset = list.find((a) => a.id === id);
+  getAsset: (id: string) => idbStorage.getAsset(id),
+  getAssets: async (sessionId?: string) => {
+    return idbStorage.getAllAssets(sessionId);
+  },
+  updateAssetSyncStatus: async (id: string, status: SyncStatus) => {
+    const asset = await idbStorage.getAsset(id);
     if (asset) {
       asset.sync_status = status;
-      setItem(STORAGE_KEYS.ASSETS, list);
+      await idbStorage.saveAsset(asset);
     }
+  },
+
+  // --- Asset History (路产不可覆盖历史记录) ---
+  addAssetHistory: (rec: AssetHistoryRecord) => {
+    idbStorage.addAssetHistory(rec);
+  },
+  getAssetHistory: (assetId: string) => {
+    return idbStorage.getAssetHistory(assetId);
   },
 
   // --- Video Slices ---
   saveVideoSlice: (slice: VideoSlice) => {
-    const list = getItem<VideoSlice>(STORAGE_KEYS.VIDEOS);
-    const idx = list.findIndex((v) => v.id === slice.id);
-    if (idx >= 0) list[idx] = slice;
-    else list.push(slice);
-    setItem(STORAGE_KEYS.VIDEOS, list);
+    idbStorage.saveVideoSlice(slice);
   },
-  getVideoSlices: () => getItem<VideoSlice>(STORAGE_KEYS.VIDEOS),
-  updateVideoStatus: (id: string, status: VideoSlice['upload_status'], uploadedBytes?: number) => {
-    const list = getItem<VideoSlice>(STORAGE_KEYS.VIDEOS);
+  getVideoSlices: async (sessionId?: string) => {
+    return idbStorage.getVideoSlices(sessionId);
+  },
+  updateVideoStatus: async (id: string, status: VideoSlice['upload_status'], uploadedBytes?: number) => {
+    const list = await idbStorage.getVideoSlices();
     const slice = list.find((v) => v.id === id);
     if (slice) {
       slice.upload_status = status;
       if (uploadedBytes !== undefined) slice.uploaded_bytes = uploadedBytes;
-      setItem(STORAGE_KEYS.VIDEOS, list);
+      await idbStorage.saveVideoSlice(slice);
     }
   },
 
-  // --- Upload Tasks ---
-  saveTask: (task: UploadTask) => {
-    const list = getItem<UploadTask>(STORAGE_KEYS.TASKS);
-    const idx = list.findIndex((t) => t.id === task.id);
-    if (idx >= 0) list[idx] = task;
-    else list.push(task);
-    setItem(STORAGE_KEYS.TASKS, list);
+  // --- Video Events (视频证据事件) ---
+  saveVideoEvent: (event: VideoEvent) => {
+    idbStorage.saveVideoEvent(event);
   },
-  getTasks: () => getItem<UploadTask>(STORAGE_KEYS.TASKS),
-  getPendingTasks: () => {
-    return getItem<UploadTask>(STORAGE_KEYS.TASKS)
-      .filter((t) => t.status === 'PENDING' || t.status === 'FAILED')
-      .sort((a, b) => a.priority - b.priority);
+  getVideoEvents: async (sessionId?: string) => {
+    return idbStorage.getVideoEvents(sessionId);
+  },
+
+  // --- Sync Queue (正式同步队列) ---
+  saveTask: (task: UploadTask | SyncQueueItem) => {
+    const rawType = ((task as any).item_type || (task as any).task_type || 'ASSET') as string;
+    let itemType: SyncQueueItem['item_type'] = 'ASSET';
+    if (rawType === 'SESSION' || rawType === 'PATROL_SESSION') itemType = 'PATROL_SESSION';
+    else if (rawType === 'TRACK' || rawType === 'GPS_TRACK') itemType = 'GPS_TRACK';
+    else if (rawType === 'ASSET') itemType = 'ASSET';
+    else if (rawType === 'VIDEO_EVENT') itemType = 'VIDEO_EVENT';
+    else if (rawType === 'PHOTO') itemType = 'PHOTO';
+    else if (rawType === 'VIDEO') itemType = 'VIDEO';
+
+    const queueItem: SyncQueueItem = {
+      id: task.id,
+      session_id: task.session_id,
+      item_type: itemType,
+      priority: task.priority,
+      resource_id: task.resource_id,
+      status: task.status,
+      retry_count: task.retry_count,
+      max_retries: 5,
+      last_error: task.last_error,
+      idempotency_key: `${itemType}_${task.resource_id}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    idbStorage.saveQueueItem(queueItem);
+  },
+  getTasks: async () => {
+    return idbStorage.getAllQueueItems();
+  },
+  getPendingTasks: async () => {
+    return idbStorage.getPendingQueueItems();
   },
   updateTaskStatus: (id: string, status: SyncStatus, error?: string) => {
-    const list = getItem<UploadTask>(STORAGE_KEYS.TASKS);
-    const task = list.find((t) => t.id === id);
-    if (task) {
-      task.status = status;
-      if (error) task.last_error = error;
-      setItem(STORAGE_KEYS.TASKS, list);
-    }
+    idbStorage.updateQueueItemStatus(id, status, error);
   },
+
+  clearAll: () => idbStorage.clearAll(),
 };

@@ -29,6 +29,7 @@
   "author": "Road Asset Management Team",
   "license": "ISC",
   "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
     "@types/node": "^26.4.1",
     "typescript": "^7.0.2"
   }

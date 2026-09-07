@@ -36,6 +36,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Make Gradlew Executable
+        run: |
+          chmod +x apps/mobile/android/gradlew
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
       - name: Install Monorepo Dependencies
         run: npm install
 
@@ -45,11 +53,7 @@ jobs:
       - name: Sync Capacitor Android Project
         run: |
           cd apps/mobile
-          npx cap sync android
-
-      - name: Make Gradlew Executable
-        run: |
-          chmod +x apps/mobile/android/gradlew
+          npx --yes @capacitor/cli sync android
 
       - name: Build Debug APK with Gradle
         run: |

@@ -1,0 +1,16 @@
+{
+  "name": "@road-gis/shared",
+  "version": "1.0.1",
+  "description": "道路路产智能巡查与 GIS 管理系统 - 共享核心库",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

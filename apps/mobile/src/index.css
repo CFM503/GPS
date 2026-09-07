@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior-y: none;
+}
+
+/* 消除移动端点击蓝色高亮 */
+* {
+  -webkit-tap-highlight-color: transparent;
+}

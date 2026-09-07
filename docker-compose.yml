@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 15 + PostGIS 3 空间数据库
+  postgres:
+    image: postgis/postgis:15-3.4
+    container_name: road_gis_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: gis_user
+      POSTGRES_PASSWORD: gis_secret_password
+      POSTGRES_DB: road_gis_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gis_user -d road_gis_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO 对象存储服务 (用于巡查照片与视频切片分块存储)
+  minio:
+    image: minio/minio:RELEASE.2024-01-18T22-51-28Z
+    container_name: road_gis_minio
+    restart: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  # 自动创建 MinIO Bucket 容器
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/road-assets;
+      /usr/bin/mc anonymous set public myminio/road-assets;
+      exit 0;
+      "
+
+volumes:
+  pgdata:
+  miniodata:

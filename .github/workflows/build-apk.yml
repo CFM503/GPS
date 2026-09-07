@@ -36,10 +36,10 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android Platform & Build Tools
+      - name: Accept Android SDK Licenses & Prepare Platforms
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" "build-tools;35.0.0" || true
 
       - name: Make Gradlew Executable
         run: |
@@ -60,6 +60,14 @@ jobs:
           cd apps/mobile/android
           ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../../../gradle-build.log
         shell: bash
+
+      - name: Output Gradle Error to Step Summary
+        if: failure()
+        run: |
+          echo "### Gradle Build Output on Failure" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          tail -n 250 gradle-build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Upload Gradle Build Log on Failure
         if: failure()

@@ -28,6 +28,10 @@
   ],
   "author": "Road Asset Management Team",
   "license": "ISC",
+  "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/core": "^8.5.1"
+  },
   "devDependencies": {
     "@capacitor/cli": "^8.5.1",
     "@types/node": "^26.4.1",

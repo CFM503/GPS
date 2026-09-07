@@ -61,20 +61,15 @@ jobs:
           ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../../../gradle-build.log
         shell: bash
 
-      - name: Output Gradle Error to Step Summary
+      - name: Push Build Log to Debug Branch on Failure
         if: failure()
         run: |
-          echo "### Gradle Build Output on Failure" >> $GITHUB_STEP_SUMMARY
-          echo '```text' >> $GITHUB_STEP_SUMMARY
-          tail -n 250 gradle-build.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload Gradle Build Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-log
-          path: gradle-build.log
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B debug-ci-log
+          git add -f gradle-build.log
+          git commit -m "ci: gradle build failure log" || true
+          git push origin debug-ci-log --force || true
 
       - name: Verify APK Generated
         run: |

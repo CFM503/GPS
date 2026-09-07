@@ -36,13 +36,14 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android Platform & Build Tools
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || true
+
       - name: Make Gradlew Executable
         run: |
           chmod +x apps/mobile/android/gradlew
-
-      - name: Accept Android SDK Licenses
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Install Monorepo Dependencies
         run: npm install
@@ -57,7 +58,15 @@ jobs:
       - name: Build Debug APK with Gradle
         run: |
           cd apps/mobile/android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee ../../../gradle-build.log
+        shell: bash
+
+      - name: Upload Gradle Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: gradle-build.log
 
       - name: Verify APK Generated
         run: |

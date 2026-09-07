@@ -1,4 +1,4 @@
-﻿# Android APK 打包与编译构建指南 (ANDROID_BUILD.md)
+# Android APK 打包与编译构建指南 (ANDROID_BUILD.md)
 
 本文档说明如何将“道路路产智能巡查系统”移动巡查端编译打包为 Android 安装包（`.apk`）。
 
@@ -20,8 +20,8 @@
 
 在准备编译 APK 的机器上，需具备以下基础开发环境：
 1. **Node.js**：v18.x 或 v20.x
-2. **Java 开发套件 (JDK)**：OpenJDK 17（推荐 Eclipse Temurin 17 或 Microsoft OpenJDK 17）
-   - 配置环境变量 `JAVA_HOME` 指向 JDK 17 根目录。
+2. **Java 开发套件 (JDK)**：OpenJDK 21（推荐 Eclipse Temurin 21 或 Microsoft OpenJDK 21，Capacitor 8 原生构建要求 Java 21）
+   - 配置环境变量 `JAVA_HOME` 指向 JDK 21 根目录。
 3. **Android SDK**：
    - 建议安装最新版 **Android Studio Ladybug (2024.2+)** 或 **Android SDK Command-line Tools**。
    - SDK 目标版本：`compileSdkVersion 34`，`targetSdkVersion 34`，`minSdkVersion 22`。

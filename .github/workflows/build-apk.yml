@@ -1,4 +1,4 @@
-﻿name: Build and Release Android APK
+name: Build and Release Android APK
 
 on:
   push:
@@ -36,10 +36,10 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android SDK Licenses & Prepare Platforms
+      - name: Install Android Platform 36 & Accept Licenses
         run: |
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-35" "build-tools;35.0.0" || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "platforms;android-36" "build-tools;36.0.0" || true
 
       - name: Make Gradlew Executable
         run: |
